@@ -1,2 +1,8 @@
 # go-template
-golang project code templates
+
+golang project templates
+
+## Download templates with gonew
+
+These templates were designed to work and be downloaded with
+[gonew](https://pkg.go.dev/golang.org/x/tools/cmd/gonew).
