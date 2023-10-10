@@ -4,7 +4,7 @@ Golang project templates
 
 ## Not necessarily for everyone.
 
-The goal of go-templates is to improve productivity, not simplicity.😉
+The goal of go-template is to improve productivity, not simplicity.😉
 
 So there's going to be some third-party modules that are good enough😊, and of course, my have to make sure that they're good enough😋. 
 

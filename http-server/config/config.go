@@ -11,10 +11,10 @@ import (
 // Here are some basic configurations
 // These configurations are usually generic
 var (
-	SelfName    = filepath.Base(os.Args[0])                              // own file name
-	AbsPath     = pathtool.GetCurrentDirectory()                         // current directory
-	LogDir      = filepath.Join(pathtool.GetCurrentDirectory(), "log")   // log directory
-	SelfLogPath = filepath.Join(LogDir, fmt.Sprintf("%s.log", SelfName)) // self log path
+	SelfName = filepath.Base(os.Args[0])                              // own file name
+	AbsPath  = pathtool.GetCurrentDirectory()                         // current directory
+	LogDir   = filepath.Join(pathtool.GetCurrentDirectory(), "log")   // log directory
+	LogPath  = filepath.Join(LogDir, fmt.Sprintf("%s.log", SelfName)) // self log path
 )
 
 // These configurations vary according to actual usage scenarios

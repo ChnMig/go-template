@@ -6,6 +6,7 @@ import (
 
 	"http-server/config"
 
+	"github.com/fsnotify/fsnotify"
 	"github.com/natefinch/lumberjack"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -51,6 +52,46 @@ func createProductLogger(fileName string) *zap.Logger {
 	return zap.New(core, zap.AddCaller())
 }
 
+// Reset logger to prevent zap persistence problems after files are deleted
+func ResetLogger() {
+	model := os.Getenv(envKey)
+	if model == modelDevValue {
+		logger = createDevLogger(config.LogPath)
+	} else {
+		logger = createProductLogger(config.LogPath)
+	}
+	zap.ReplaceGlobals(logger)
+}
+
+// Listen to log files
+func MonitorFile() {
+	watcher, err := fsnotify.NewWatcher()
+	if err != nil {
+		zap.L().Error("File listening error", zap.Error(err))
+		return
+	}
+	defer watcher.Close()
+	err = watcher.Add(config.LogPath)
+	if err != nil {
+		zap.L().Error("File listening error", zap.Error(err))
+	}
+	for {
+		select {
+		case event := <-watcher.Events:
+			if event.Has(fsnotify.Remove) {
+				zap.L().Warn("The log file was deleted")
+				ResetLogger()
+			}
+			if event.Has(fsnotify.Rename) {
+				zap.L().Warn("Log files are renamed and new files are monitored")
+				ResetLogger()
+			}
+		case err := <-watcher.Errors:
+			zap.L().Error("File listening error", zap.Error(err))
+		}
+	}
+}
+
 func GetLogger() *zap.Logger {
 	return logger
 }
@@ -59,9 +100,10 @@ func init() {
 	// Get log mode
 	model := os.Getenv(envKey)
 	if model == modelDevValue {
-		logger = createDevLogger(config.SelfLogPath)
+		logger = createDevLogger(config.LogPath)
 	} else {
-		logger = createProductLogger(config.SelfLogPath)
+		logger = createProductLogger(config.LogPath)
 	}
 	zap.ReplaceGlobals(logger)
+	go MonitorFile()
 }
