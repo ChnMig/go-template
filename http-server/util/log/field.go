@@ -16,18 +16,18 @@ type LogField struct {
 
 // CustomKeyType
 type CustomField struct {
-	ClientIP string `json:"client_ip"`
+	ResuestIP string `json:"request_ip"` // requested IP
 	// Additional supplements based on actual needs
 }
 
 // Used as a key
 // The value of the field is the value of each jsontag of CustomField
 var customField = CustomField{
-	ClientIP: "client_ip",
+	ResuestIP: "request_ip",
 }
 
 // Add more according to actual needs
 // Each custom field should have a function that the consumer can call
-func NewClientIPField(ip string) zap.Field {
-	return zap.String(customField.ClientIP, ip)
+func NewRequestIPField(ip string) zap.Field {
+	return zap.String(customField.ResuestIP, ip)
 }

@@ -25,7 +25,7 @@ const (
 
 // Creating Dev logger
 // DEV mode outputs logs to the terminal and is more readable
-func createDevLogger(fileName string) *zap.Logger {
+func createDevLogger() *zap.Logger {
 	encoder := zap.NewDevelopmentEncoderConfig()
 	core := zapcore.NewTee(
 		zapcore.NewSamplerWithOptions(
@@ -56,7 +56,7 @@ func createProductLogger(fileName string) *zap.Logger {
 func ResetLogger() {
 	model := os.Getenv(envKey)
 	if model == modelDevValue {
-		logger = createDevLogger(config.LogPath)
+		logger = createDevLogger()
 	} else {
 		logger = createProductLogger(config.LogPath)
 	}
@@ -64,7 +64,8 @@ func ResetLogger() {
 }
 
 // Listen to log files
-func MonitorFile() {
+// When the log file is deleted manually, we will automatically create a new one.
+func monitorFile() {
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
 		zap.L().Error("File listening error", zap.Error(err))
@@ -79,15 +80,15 @@ func MonitorFile() {
 		select {
 		case event := <-watcher.Events:
 			if event.Has(fsnotify.Remove) {
-				zap.L().Warn("The log file was deleted")
+				zap.L().Warn("the log file was deleted")
 				ResetLogger()
 			}
 			if event.Has(fsnotify.Rename) {
-				zap.L().Warn("Log files are renamed and new files are monitored")
+				zap.L().Warn("log files are renamed and new files are monitored")
 				ResetLogger()
 			}
 		case err := <-watcher.Errors:
-			zap.L().Error("File listening error", zap.Error(err))
+			zap.L().Error("file listening error", zap.Error(err))
 		}
 	}
 }
@@ -100,10 +101,10 @@ func init() {
 	// Get log mode
 	model := os.Getenv(envKey)
 	if model == modelDevValue {
-		logger = createDevLogger(config.LogPath)
+		logger = createDevLogger()
 	} else {
 		logger = createProductLogger(config.LogPath)
 	}
 	zap.ReplaceGlobals(logger)
-	go MonitorFile()
+	go monitorFile()
 }
