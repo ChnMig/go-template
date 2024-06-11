@@ -12,7 +12,7 @@ func openRouter(router *gin.RouterGroup) {
 	exampleRouter := router.Group("/open/example")
 	{
 		exampleRouter.GET("/pong", example.Pong)
-		exampleRouter.POST("/login", example.TokenPong)
+		exampleRouter.POST("/token", example.CreateToken)
 	}
 }
 
