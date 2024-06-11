@@ -7,7 +7,7 @@ import (
 	"http-server/config"
 
 	"github.com/fsnotify/fsnotify"
-	"github.com/natefinch/lumberjack"
+	"gopkg.in/natefinch/lumberjack.v2"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
