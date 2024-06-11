@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 
 	pathtool "http-server/util/path-tool"
 )
@@ -28,6 +29,13 @@ var (
 	LogMaxBackups = 3                                                      // backups
 	LogMaxAge     = 30                                                     // days
 	LogModelDev   = "dev"                                                  // dev model
+)
+
+// These configurations need to be modified as needed
+var (
+	// jWT
+	JWTKey        = "N#xiAuAq!B!$d2Acq99Rz*Q*8&E" // Key must be regenerated, otherwise there will be security risks
+	JWTExpiration = time.Hour * 12
 )
 
 func init() {
