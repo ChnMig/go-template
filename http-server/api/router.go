@@ -1,6 +1,7 @@
 package api
 
 import (
+	"http-server/api/app/example"
 	"http-server/api/middleware"
 
 	"github.com/gin-gonic/gin"
@@ -8,10 +9,19 @@ import (
 
 // open
 func openRouter(router *gin.RouterGroup) {
+	exampleRouter := router.Group("/open/example")
+	{
+		exampleRouter.GET("/pong", example.Pong)
+		exampleRouter.POST("/login", example.TokenPong)
+	}
 }
 
 // private
 func privateRouter(router *gin.RouterGroup) {
+	exampleRouter := router.Group("/private/example", middleware.TokenVerify)
+	{
+		exampleRouter.GET("/pong", example.Pong)
+	}
 }
 
 // InitApi init gshop app
