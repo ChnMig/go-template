@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"http-server/config"
+	runmodel "http-server/util/run-model"
 
 	"github.com/fsnotify/fsnotify"
 	"go.uber.org/zap"
@@ -43,12 +44,15 @@ func createProductLogger(fileName string) *zap.Logger {
 	return zap.New(core, zap.AddCaller())
 }
 
-// Reset logger to prevent zap persistence problems after files are deleted
-func ResetLogger() {
-	model := os.Getenv(config.RunModelKey)
-	if model == config.RunModelDevValue {
+// SetLogger to prevent zap persistence problems after files are deleted
+func SetLogger() {
+	// Get log mode
+	switch {
+	case runmodel.IsDev():
 		logger = createDevLogger()
-	} else {
+	case runmodel.IsRelease():
+		logger = createProductLogger(config.LogPath)
+	default:
 		logger = createProductLogger(config.LogPath)
 	}
 	zap.ReplaceGlobals(logger)
@@ -72,11 +76,11 @@ func monitorFile() {
 		case event := <-watcher.Events:
 			if event.Has(fsnotify.Remove) {
 				zap.L().Warn("the log file was deleted")
-				ResetLogger()
+				SetLogger()
 			}
 			if event.Has(fsnotify.Rename) {
 				zap.L().Warn("log files are renamed and new files are monitored")
-				ResetLogger()
+				SetLogger()
 			}
 		case err := <-watcher.Errors:
 			zap.L().Error("file listening error", zap.Error(err))
@@ -89,13 +93,6 @@ func GetLogger() *zap.Logger {
 }
 
 func init() {
-	// Get log mode
-	model := os.Getenv(config.RunModelKey)
-	if model == config.RunModelDevValue {
-		logger = createDevLogger()
-	} else {
-		logger = createProductLogger(config.LogPath)
-	}
-	zap.ReplaceGlobals(logger)
+	SetLogger()
 	go monitorFile()
 }

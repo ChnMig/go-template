@@ -15,7 +15,9 @@ var (
 	ListenPort = 8080 // api listen port
 	// run model
 	RunModelKey      = "model"
+	RunModel         = ""
 	RunModelDevValue = "dev"
+	RunModelRelease  = "release"
 	// path
 	SelfName = filepath.Base(os.Args[0])      // own file name
 	AbsPath  = pathtool.GetCurrentDirectory() // current directory
