@@ -7,21 +7,12 @@ import (
 	"http-server/config"
 
 	"github.com/fsnotify/fsnotify"
-	"gopkg.in/natefinch/lumberjack.v2"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
+	"gopkg.in/natefinch/lumberjack.v2"
 )
 
 var logger *zap.Logger
-
-// config
-const (
-	envKey         = "log_model"
-	modelDevValue  = "dev"
-	fileMaxSize    = 1  // M
-	fileMaxBackups = 10 // backups
-	fileMaxAge     = 30 // days
-)
 
 // Creating Dev logger
 // DEV mode outputs logs to the terminal and is more readable
@@ -41,9 +32,9 @@ func createProductLogger(fileName string) *zap.Logger {
 	fileEncoder.EncodeTime = zapcore.ISO8601TimeEncoder
 	fileWriter := zapcore.AddSync(&lumberjack.Logger{
 		Filename:   fileName,
-		MaxSize:    fileMaxSize,
-		MaxBackups: fileMaxBackups,
-		MaxAge:     fileMaxAge,
+		MaxSize:    config.LogMaxSize,
+		MaxBackups: config.LogMaxBackups,
+		MaxAge:     config.LogMaxAge,
 	})
 	core := zapcore.NewTee(
 		zapcore.NewSamplerWithOptions(
@@ -54,8 +45,8 @@ func createProductLogger(fileName string) *zap.Logger {
 
 // Reset logger to prevent zap persistence problems after files are deleted
 func ResetLogger() {
-	model := os.Getenv(envKey)
-	if model == modelDevValue {
+	model := os.Getenv(config.RunModelKey)
+	if model == config.RunModelDevValue {
 		logger = createDevLogger()
 	} else {
 		logger = createProductLogger(config.LogPath)
@@ -99,8 +90,8 @@ func GetLogger() *zap.Logger {
 
 func init() {
 	// Get log mode
-	model := os.Getenv(envKey)
-	if model == modelDevValue {
+	model := os.Getenv(config.RunModelKey)
+	if model == config.RunModelDevValue {
 		logger = createDevLogger()
 	} else {
 		logger = createProductLogger(config.LogPath)
