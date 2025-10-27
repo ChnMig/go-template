@@ -43,14 +43,11 @@ func ReturnOkWithCount(c *gin.Context, count int, result interface{}) {
 }
 
 // ResponseError
-func ReturnError(c *gin.Context, data responseData, description string) {
+func ReturnError(c *gin.Context, data responseData, message string) {
 	data.Timestamp = time.Now().Unix()
-	data.Message = func() string {
-		if description == "" {
-			return data.Message
-		}
-		return description
-	}()
+	if message != "" {
+		data.Message = message
+	}
 	c.JSON(http.StatusOK, data)
 	// Return directly
 	c.Abort()
