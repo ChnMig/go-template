@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"time"
 
-	pathtool "http-server/util/path-tool"
+	pathtool "go-services/util/path-tool"
 )
 
 // Here are some basic configurations

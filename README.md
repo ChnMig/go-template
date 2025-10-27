@@ -15,6 +15,6 @@ These templates were designed to work and be downloaded with
 
 ## directory
 
-**http-server**
+**go-services**
 
 Suitable for use as a http-api server

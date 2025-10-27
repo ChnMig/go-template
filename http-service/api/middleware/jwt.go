@@ -3,8 +3,8 @@ package middleware
 import (
 	"github.com/gin-gonic/gin"
 
-	"http-server/api/response"
-	"http-server/util/authentication"
+	"go-services/api/response"
+	"go-services/util/authentication"
 )
 
 // TokenVerify Get the token and verify its validity

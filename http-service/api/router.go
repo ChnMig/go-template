@@ -1,8 +1,8 @@
 package api
 
 import (
-	"http-server/api/app/example"
-	"http-server/api/middleware"
+	"go-services/api/app/example"
+	"go-services/api/middleware"
 
 	"github.com/gin-gonic/gin"
 )

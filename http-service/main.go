@@ -1,8 +1,8 @@
 package main
 
 import (
-	"http-server/util/log"
-	runmodel "http-server/util/run-model"
+	"go-services/util/log"
+	runmodel "go-services/util/run-model"
 	"os"
 	"os/signal"
 	"syscall"
