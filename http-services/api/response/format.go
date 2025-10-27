@@ -25,23 +25,29 @@ func ReturnOk(c *gin.Context, result interface{}) {
 	c.Abort()
 }
 
-// ResponseOkWithCount
-func ReturnOkWithCount(c *gin.Context, count int, result interface{}) {
+// ResponseOkWithTotal
+func ReturnOkWithTotal(c *gin.Context, total int, result interface{}) {
 	data := OK
 	data.Timestamp = time.Now().Unix()
 	data.Detail = result
-	data.Count = &count
+	data.Total = &total
 	c.JSON(http.StatusOK, data)
 	// Return directly
 	c.Abort()
 }
 
+// ReturnOkWithCount 已废弃，请使用 ReturnOkWithTotal
+// Deprecated: Use ReturnOkWithTotal instead
+func ReturnOkWithCount(c *gin.Context, count int, result interface{}) {
+	ReturnOkWithTotal(c, count, result)
+}
+
 // ResponseError
 func ReturnError(c *gin.Context, data responseData, description string) {
 	data.Timestamp = time.Now().Unix()
-	data.Description = func() string {
+	data.Message = func() string {
 		if description == "" {
-			return data.Description
+			return data.Message
 		}
 		return description
 	}()
