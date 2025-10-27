@@ -9,4 +9,4 @@
 - 配置文件已加入 `.gitignore`，使用 `config.yaml.example` 作为模板
 - 所有配置加载在程序启动时完成，并在 logger 初始化后进行校验
 - 项目基于 art-design-pro-edge-go-server 框架，定期同步基础组件更新
-- 支持单体应用和多租户两种认证模式，保持向后兼容
+- 使用标准JWT认证，简洁高效

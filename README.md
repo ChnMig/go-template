@@ -53,17 +53,14 @@ jwt:
 
 ### Core Components
 
-- **JWT Authentication**: Supports both single-app and multi-tenant authentication
+- **JWT Authentication**: Standard JWT authentication
 - **CORS**: Cross-Origin Resource Sharing middleware
 - **Password Encryption**: BCrypt-based secure password hashing
 - **Pagination**: Built-in pagination support with configurable defaults
 
 ### Middleware
 
-- `TokenVerify`: Basic JWT authentication for single-app
-- `MultiTenantTokenVerify`: JWT authentication with tenant support
-- `SuperAdminVerify`: Super admin permission verification
-- `TenantAdminVerify`: Tenant admin permission verification
+- `TokenVerify`: JWT authentication middleware
 - `CorssDomainHandler`: CORS middleware
 - `CheckParam`: Request parameter validation
 
@@ -72,7 +69,7 @@ jwt:
 - **Authentication** (`util/authentication`):
   - JWT token generation and parsing
   - HS256 signing and verification
-  - Multi-tenant JWT support via `api/auth`
+  - Standard claims support
 
 - **Encryption** (`util/encryption`):
   - BCrypt password hashing
@@ -97,7 +94,6 @@ Key dependencies include:
 http-services/
 ├── api/
 │   ├── app/              # API handlers
-│   ├── auth/             # Multi-tenant authentication
 │   ├── middleware/       # Middleware components
 │   └── response/         # Response formatters
 ├── config/               # Configuration management
