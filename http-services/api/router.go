@@ -9,7 +9,8 @@ import (
 
 // open
 func openRouter(router *gin.RouterGroup) {
-	exampleRouter := router.Group("/open/example")
+	// 示例：为开放接口添加 IP 限流（每秒10个请求，突发20个）
+	exampleRouter := router.Group("/open/example", middleware.IPRateLimit(10, 20))
 	{
 		exampleRouter.GET("/pong", example.Pong)
 		exampleRouter.POST("/token", example.CreateToken)
@@ -18,7 +19,8 @@ func openRouter(router *gin.RouterGroup) {
 
 // private
 func privateRouter(router *gin.RouterGroup) {
-	exampleRouter := router.Group("/private/example", middleware.TokenVerify)
+	// 示例：为私有接口添加 Token 限流（每秒100个请求，突发200个）
+	exampleRouter := router.Group("/private/example", middleware.TokenVerify, middleware.TokenRateLimit(100, 200))
 	{
 		exampleRouter.GET("/pong", example.Pong)
 	}
