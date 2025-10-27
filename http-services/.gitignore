@@ -1,6 +1,8 @@
 # Build
 bulid/
+bin/
 *.exe
+http-services
 
 # dotenv and config
 .env

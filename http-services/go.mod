@@ -3,6 +3,7 @@ module go-services
 go 1.25.3
 
 require (
+	github.com/alecthomas/kong v1.12.1
 	github.com/fsnotify/fsnotify v1.9.0
 	github.com/gin-gonic/gin v1.11.0
 	github.com/goccy/go-yaml v1.18.0

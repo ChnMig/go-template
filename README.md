@@ -19,9 +19,7 @@ These templates were designed to work and be downloaded with
 
 Suitable for use as a http-api service template.
 
-## Configuration
-
-The project uses a YAML configuration file for managing settings.
+## Quick Start
 
 ### Setup
 
@@ -35,6 +33,39 @@ The project uses a YAML configuration file for managing settings.
 2. Edit `config.yaml` and update the values, especially:
    - `jwt.key`: Change this to a secure random string
    - `jwt.expiration`: Set token expiration time (e.g., "12h", "24h", "30m")
+
+3. Build and run:
+
+   ```bash
+   # 显示帮助
+   make help
+
+   # 构建
+   make build
+
+   # 运行（生产模式）
+   make run
+
+   # 运行（开发模式）
+   make dev
+   ```
+
+### Command Line Options
+
+```bash
+# 开发模式
+./bin/http-services --dev
+
+# 显示版本信息
+./bin/http-services --version
+
+# 显示帮助
+./bin/http-services --help
+```
+
+## Configuration
+
+The project uses a YAML configuration file for managing settings.
 
 ### Configuration File Structure
 
@@ -85,6 +116,7 @@ Key dependencies include:
 - `github.com/gin-gonic/gin` - Web framework
 - `github.com/golang-jwt/jwt/v5` - JWT implementation
 - `github.com/goccy/go-yaml` - YAML parser
+- `github.com/alecthomas/kong` - Command line parser
 - `golang.org/x/crypto/bcrypt` - Password encryption
 - `go.uber.org/zap` - Structured logging
 

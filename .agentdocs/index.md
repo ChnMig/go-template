@@ -3,6 +3,7 @@
 ## 后端文档
 `backend/configuration.md` - 后端配置管理架构与使用说明，修改配置相关代码时必读
 `backend/middleware.md` - 中间件架构与使用文档，开发API时必读
+`backend/cli.md` - 命令行参数文档，启动和部署时必读
 
 ## 全局重要记忆
 - 项目使用 YAML 配置文件管理配置项，配置文件位于 `http-services/config.yaml`
