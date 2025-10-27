@@ -6,8 +6,8 @@
 ## 配置文件结构
 
 ### 位置
-- 配置文件：`http-service/config.yaml`（不提交到 git）
-- 示例文件：`http-service/config.yaml.example`（提交到 git）
+- 配置文件：`http-services/config.yaml`（不提交到 git）
+- 示例文件：`http-services/config.yaml.example`（提交到 git）
 
 ### 格式
 ```yaml

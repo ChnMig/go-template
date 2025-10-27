@@ -1,5 +1,0 @@
-{
-    "gopls": {
-        "formatting.local": "go-server"  // Value from go.mod > model
-    }
-}

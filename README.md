@@ -15,7 +15,7 @@ These templates were designed to work and be downloaded with
 
 ## directory
 
-### http-service
+### http-services
 
 Suitable for use as a http-api service template.
 
@@ -28,7 +28,7 @@ The project uses a YAML configuration file for managing settings.
 1. Copy the example configuration file:
 
    ```bash
-   cd http-service
+   cd http-services
    cp config.yaml.example config.yaml
    ```
 
@@ -94,7 +94,7 @@ Key dependencies include:
 ## Project Structure
 
 ```text
-http-service/
+http-services/
 ├── api/
 │   ├── app/              # API handlers
 │   ├── auth/             # Multi-tenant authentication

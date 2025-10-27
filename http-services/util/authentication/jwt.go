@@ -11,7 +11,7 @@ import (
 )
 
 var (
-	defaultIssuer   = "server"
+	defaultIssuer   = "http-services"
 	defaultSubject  = "token"
 	defaultAudience = "client"
 )
