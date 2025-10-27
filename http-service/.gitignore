@@ -2,8 +2,9 @@
 bulid/
 *.exe
 
-# dotenv
+# dotenv and config
 .env
+config.yaml
 
 # venv
 /vendor/

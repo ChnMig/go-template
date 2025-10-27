@@ -15,6 +15,36 @@ These templates were designed to work and be downloaded with
 
 ## directory
 
-**go-services**
+### http-service
 
-Suitable for use as a http-api server
+Suitable for use as a http-api service template.
+
+## Configuration
+
+The project uses a YAML configuration file for managing settings.
+
+### Setup
+
+1. Copy the example configuration file:
+
+   ```bash
+   cd http-service
+   cp config.yaml.example config.yaml
+   ```
+
+2. Edit `config.yaml` and update the values, especially:
+   - `jwt.key`: Change this to a secure random string
+   - `jwt.expiration`: Set token expiration time (e.g., "12h", "24h", "30m")
+
+### Configuration File Structure
+
+```yaml
+server:
+  port: 8080
+
+jwt:
+  key: "YOUR_SECRET_KEY_HERE"
+  expiration: "12h"
+```
+
+**Important**: The `config.yaml` file is ignored by git to prevent sensitive data from being committed. Always use `config.yaml.example` as a template.

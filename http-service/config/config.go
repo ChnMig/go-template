@@ -31,13 +31,14 @@ var (
 	LogModelDev   = "dev"                                                  // dev model
 )
 
-// These configurations need to be modified as needed
+// 从配置文件加载的配置变量
 var (
-	// jWT
-	JWTKey        = "N#xiAuAq!B!$d2Acq99Rz*Q*8&E" // Key must be regenerated, otherwise there will be security risks
-	JWTExpiration = time.Hour * 12
+	// JWT
+	JWTKey        string
+	JWTExpiration time.Duration
 )
 
 func init() {
 	pathtool.CreateDir(LogDir)
+	// 配置校验逻辑已移至 main.go，确保 zap logger 初始化后再校验
 }

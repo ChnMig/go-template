@@ -1,0 +1,9 @@
+# HTTP Service 配置文件示例
+# 使用前请复制此文件为 config.yaml 并修改其中的配置项
+
+server:
+  port: 8080
+
+jwt:
+  key: "YOUR_SECRET_KEY_HERE"  # 务必修改此密钥，否则存在安全风险
+  expiration: "12h"  # JWT token 过期时间，格式: 12h, 24h, 30m 等
