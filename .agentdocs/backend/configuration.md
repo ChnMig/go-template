@@ -59,6 +59,14 @@ func example() {
 
 ## 依赖
 - `github.com/goccy/go-yaml` - YAML 解析库
+- `golang.org/x/crypto/bcrypt` - 密码加密库
+
+## 配置项说明
+
+### 分页配置
+- `DefaultPageSize`: 默认分页大小（20）
+- `DefaultPage`: 默认页码（1）
+- `CancelPageSize/CancelPage`: 取消分页标志（-1）
 
 ## 注意事项
 - 配置文件包含敏感信息，已通过 `.gitignore` 排除，避免提交到版本控制

@@ -48,3 +48,68 @@ jwt:
 ```
 
 **Important**: The `config.yaml` file is ignored by git to prevent sensitive data from being committed. Always use `config.yaml.example` as a template.
+
+## Features
+
+### Core Components
+
+- **JWT Authentication**: Supports both single-app and multi-tenant authentication
+- **CORS**: Cross-Origin Resource Sharing middleware
+- **Password Encryption**: BCrypt-based secure password hashing
+- **Pagination**: Built-in pagination support with configurable defaults
+
+### Middleware
+
+- `TokenVerify`: Basic JWT authentication for single-app
+- `MultiTenantTokenVerify`: JWT authentication with tenant support
+- `SuperAdminVerify`: Super admin permission verification
+- `TenantAdminVerify`: Tenant admin permission verification
+- `CorssDomainHandler`: CORS middleware
+- `CheckParam`: Request parameter validation
+
+### Utilities
+
+- **Authentication** (`util/authentication`):
+  - JWT token generation and parsing
+  - HS256 signing and verification
+  - Multi-tenant JWT support via `api/auth`
+
+- **Encryption** (`util/encryption`):
+  - BCrypt password hashing
+  - Password verification
+
+- **ID Generation** (`util/id`):
+  - MD5-based unique ID generation
+
+### Dependencies
+
+Key dependencies include:
+
+- `github.com/gin-gonic/gin` - Web framework
+- `github.com/golang-jwt/jwt/v5` - JWT implementation
+- `github.com/goccy/go-yaml` - YAML parser
+- `golang.org/x/crypto/bcrypt` - Password encryption
+- `go.uber.org/zap` - Structured logging
+
+## Project Structure
+
+```text
+http-service/
+├── api/
+│   ├── app/              # API handlers
+│   ├── auth/             # Multi-tenant authentication
+│   ├── middleware/       # Middleware components
+│   └── response/         # Response formatters
+├── config/               # Configuration management
+├── util/                 # Utility packages
+│   ├── authentication/   # JWT utilities
+│   ├── encryption/       # Password encryption
+│   ├── id/              # ID generation
+│   ├── log/             # Logging
+│   └── path-tool/       # Path utilities
+└── main.go              # Application entry point
+```
+
+## Development Notes
+
+This template is based on [art-design-pro-edge-go-server](https://github.com/ChnMig/art-design-pro-edge-go-server) and includes regularly synchronized updates to core components.

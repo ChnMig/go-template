@@ -38,6 +38,14 @@ var (
 	JWTExpiration time.Duration
 )
 
+// 分页配置
+var (
+	DefaultPageSize = 20 // 默认分页大小
+	DefaultPage     = 1  // 默认页码
+	CancelPageSize  = -1 // 取消分页大小
+	CancelPage      = -1 // 取消页码
+)
+
 func init() {
 	pathtool.CreateDir(LogDir)
 	// 配置校验逻辑已移至 main.go，确保 zap logger 初始化后再校验
