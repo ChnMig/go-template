@@ -168,6 +168,75 @@ func TestReturnErrorWithData(t *testing.T) {
 	}
 }
 
+// 测试 trace_id 是否正确设置
+func TestTraceIDInResponse(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+
+	// 模拟设置 Request ID
+	expectedTraceID := "test-trace-id-12345"
+	c.Set("X-Request-ID", expectedTraceID)
+
+	testData := map[string]string{"message": "test"}
+	ReturnOk(c, testData)
+
+	var resp responseData
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("Failed to unmarshal response: %v", err)
+	}
+
+	if resp.TraceID != expectedTraceID {
+		t.Errorf("Expected trace_id '%s', got '%s'", expectedTraceID, resp.TraceID)
+	}
+}
+
+// 测试错误响应中的 trace_id
+func TestTraceIDInErrorResponse(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+
+	// 模拟设置 Request ID
+	expectedTraceID := "error-trace-id-67890"
+	c.Set("X-Request-ID", expectedTraceID)
+
+	ReturnError(c, INVALID_ARGUMENT, "Test error")
+
+	var resp responseData
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("Failed to unmarshal response: %v", err)
+	}
+
+	if resp.TraceID != expectedTraceID {
+		t.Errorf("Expected trace_id '%s', got '%s'", expectedTraceID, resp.TraceID)
+	}
+}
+
+// 测试没有 trace_id 的情况
+func TestNoTraceID(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+
+	// 不设置 Request ID
+	testData := map[string]string{"message": "test"}
+	ReturnOk(c, testData)
+
+	var resp responseData
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("Failed to unmarshal response: %v", err)
+	}
+
+	// trace_id 应该为空字符串
+	if resp.TraceID != "" {
+		t.Errorf("Expected empty trace_id, got '%s'", resp.TraceID)
+	}
+}
+
 // 测试所有预定义的错误码
 func TestAllErrorCodes(t *testing.T) {
 	testCases := []struct {

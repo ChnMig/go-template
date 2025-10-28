@@ -8,6 +8,7 @@ import (
 	runmodel "http-services/utils/run-model"
 
 	"github.com/fsnotify/fsnotify"
+	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"gopkg.in/natefinch/lumberjack.v2"
@@ -128,4 +129,27 @@ func StopMonitor() {
 	if logger != nil {
 		_ = logger.Sync()
 	}
+}
+
+// FromContext 从 gin.Context 中获取带上下文信息的 logger
+// 如果 context 中没有 logger，则返回全局 logger
+// 这个函数应该在业务处理器中使用，以获取包含 trace_id、method、path 等上下文信息的 logger
+//
+// 使用示例:
+//
+//	func Handler(c *gin.Context) {
+//	    logger := log.FromContext(c)
+//	    logger.Info("处理用户请求", zap.String("user_id", userID))
+//	}
+func FromContext(c *gin.Context) *zap.Logger {
+	// 尝试从 context 获取 logger
+	if loggerVal, exists := c.Get("logger"); exists {
+		if contextLogger, ok := loggerVal.(*zap.Logger); ok {
+			return contextLogger
+		}
+	}
+
+	// 如果没有上下文 logger，返回全局 logger
+	// 这种情况通常发生在测试或者中间件执行顺序问题
+	return GetLogger()
 }

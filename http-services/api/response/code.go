@@ -6,6 +6,7 @@ type responseData struct {
 	Status      string      `json:"status"`
 	Description string      `json:"description"`
 	Message     string      `json:"message,omitempty"`
+	TraceID     string      `json:"trace_id,omitempty"` // 请求追踪 ID
 	Timestamp   int64       `json:"timestamp"`
 	Detail      interface{} `json:"detail,omitempty"`
 	Total       *int        `json:"total,omitempty"`

@@ -1,5 +1,17 @@
 # HTTP Service 配置文件示例
 # 使用前请复制此文件为 config.yaml 并修改其中的配置项
+#
+# 环境变量支持：
+# 所有配置项都可以通过环境变量覆盖，格式为：HTTP_SERVICES_<SECTION>_<KEY>
+# 例如：
+#   export HTTP_SERVICES_SERVER_PORT=9090        # 覆盖 server.port
+#   export HTTP_SERVICES_JWT_KEY="my-secret"     # 覆盖 jwt.key
+#   export HTTP_SERVICES_LOG_MAX_SIZE=100        # 覆盖 log.max_size
+#
+# 配置文件查找顺序：
+# 1. 当前目录 (./config.yaml)
+# 2. 工作目录 (./config.yaml)
+# 3. 系统目录 (/etc/http-services/config.yaml)
 
 server:
   port: 8080

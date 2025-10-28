@@ -13,7 +13,7 @@ const (
 )
 
 // RequestID 请求 ID 追踪中间件
-// 为每个请求生成唯一 ID，方便日志追踪和问题排查
+// 为每个请求生成唯一 ID，并创建带上下文的 logger，方便日志追踪和问题排查
 func RequestID() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		// 尝试从请求头获取 Request ID
@@ -30,14 +30,23 @@ func RequestID() gin.HandlerFunc {
 		// 在响应头中返回 Request ID
 		c.Header(RequestIDKey, requestID)
 
-		// 在日志中记录请求信息
-		zap.L().Info("Request",
-			zap.String("request_id", requestID),
+		// 创建带上下文信息的 logger 并存入 context
+		contextLogger := zap.L().With(
+			zap.String("trace_id", requestID),
 			zap.String("method", c.Request.Method),
 			zap.String("path", c.Request.URL.Path),
-			zap.String("ip", c.ClientIP()),
+			zap.String("client_ip", c.ClientIP()),
 		)
+		c.Set("logger", contextLogger)
+
+		// 记录请求开始
+		contextLogger.Info("Request started")
 
 		c.Next()
+
+		// 记录请求完成（包含状态码）
+		contextLogger.Info("Request completed",
+			zap.Int("status_code", c.Writer.Status()),
+		)
 	}
 }
