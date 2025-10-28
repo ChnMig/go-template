@@ -23,12 +23,9 @@ var (
 	SelfName = filepath.Base(os.Args[0])      // own file name
 	AbsPath  = pathtool.GetCurrentDirectory() // current directory
 	// log
-	LogDir        = filepath.Join(pathtool.GetCurrentDirectory(), "log")   // log directory
-	LogPath       = filepath.Join(LogDir, fmt.Sprintf("%s.log", SelfName)) // self log path
-	LogMaxSize    = 50                                                     // M
-	LogMaxBackups = 3                                                      // backups
-	LogMaxAge     = 30                                                     // days
-	LogModelDev   = "dev"                                                  // dev model
+	LogDir      = filepath.Join(pathtool.GetCurrentDirectory(), "log")   // log directory
+	LogPath     = filepath.Join(LogDir, fmt.Sprintf("%s.log", SelfName)) // self log path
+	LogModelDev = "dev"                                                  // dev model
 )
 
 // 从配置文件加载的配置变量
@@ -47,6 +44,11 @@ var (
 	EnableRateLimit bool          // 是否启用全局限流
 	GlobalRateLimit int           // 全局限流速率（每秒请求数）
 	GlobalRateBurst int           // 全局限流突发容量
+
+	// Log
+	LogMaxSize    int // 日志文件最大大小（MB）
+	LogMaxBackups int // 日志文件最大备份数
+	LogMaxAge     int // 日志文件最大保留天数
 )
 
 // 分页配置

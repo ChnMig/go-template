@@ -20,5 +20,10 @@ server:
   global_rate_burst: 200          # 全局限流突发容量
 
 jwt:
-  key: "YOUR_SECRET_KEY_HERE"  # 务必修改此密钥，否则存在安全风险
+  key: "YOUR_SECRET_KEY_HERE"  # 务必修改此密钥，否则存在安全风险（至少32字符）
   expiration: "12h"  # JWT token 过期时间，格式: 12h, 24h, 30m 等
+
+log:
+  max_size: 50      # 单个日志文件最大大小（MB）
+  max_backups: 3    # 保留的旧日志文件最大数量
+  max_age: 30       # 保留旧日志文件的最大天数

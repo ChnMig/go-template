@@ -71,13 +71,14 @@ func ParseHS256(tokenString string, claims jwt.Claims) (*jwt.Token, error) {
 // JWTIssue 签发 JWT Token，使用 map 存储数据
 // 参数 data 可以是任何 map[string]interface{}，完全灵活
 // 使用示例：
-//   data := map[string]interface{}{
-//       "user_id": "123",
-//       "username": "john",
-//       "role": "admin",
-//       "permissions": []string{"read", "write"},
-//   }
-//   token, err := JWTIssue(data)
+//
+//	data := map[string]interface{}{
+//	    "user_id": "123",
+//	    "username": "john",
+//	    "role": "admin",
+//	    "permissions": []string{"read", "write"},
+//	}
+//	token, err := JWTIssue(data)
 func JWTIssue(data map[string]interface{}) (string, error) {
 	claims := MapClaims{Data: data}
 	PrepareRegisteredClaims(&claims.RegisteredClaims)

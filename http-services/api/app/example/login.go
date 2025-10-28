@@ -24,9 +24,9 @@ func CreateToken(c *gin.Context) {
 
 	// 使用 map 存储用户数据，灵活适配不同项目
 	userData := map[string]interface{}{
-		"user_id":  "12345",      // 用户ID
-		"username": params.User,  // 用户名
-		"role":     "admin",      // 角色
+		"user_id":  "12345",     // 用户ID
+		"username": params.User, // 用户名
+		"role":     "admin",     // 角色
 		// 可以根据项目需要添加更多字段
 		// "permissions": []string{"read", "write"},
 		// "dept": "engineering",

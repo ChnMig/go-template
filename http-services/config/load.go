@@ -2,130 +2,141 @@ package config
 
 import (
 	"fmt"
-	"os"
-	"path/filepath"
-	"time"
+	"strings"
 
-	"github.com/goccy/go-yaml"
+	"github.com/fsnotify/fsnotify"
+	"github.com/spf13/viper"
+	"go.uber.org/zap"
 )
 
-// YamlConfig 表示 YAML 配置文件的结构
-type YamlConfig struct {
-	Server struct {
-		Port            int    `yaml:"port"`
-		MaxBodySize     string `yaml:"max_body_size"`     // 例如: "10MB"
-		ShutdownTimeout string `yaml:"shutdown_timeout"`  // 例如: "10s"
-		ReadTimeout     string `yaml:"read_timeout"`      // 例如: "30s"
-		WriteTimeout    string `yaml:"write_timeout"`     // 例如: "30s"
-		IdleTimeout     string `yaml:"idle_timeout"`      // 例如: "120s"
-		MaxHeaderBytes  int    `yaml:"max_header_bytes"`  // 例如: 1048576 (1MB)
-		EnableRateLimit bool   `yaml:"enable_rate_limit"` // 是否启用全局限流
-		GlobalRateLimit int    `yaml:"global_rate_limit"` // 全局限流速率
-		GlobalRateBurst int    `yaml:"global_rate_burst"` // 全局限流突发
-	} `yaml:"server"`
-	JWT struct {
-		Key        string `yaml:"key"`
-		Expiration string `yaml:"expiration"`
-	} `yaml:"jwt"`
+var (
+	v *viper.Viper // Viper 实例
+)
+
+// LoadConfig 使用 Viper 加载配置
+func LoadConfig() error {
+	v = viper.New()
+
+	// 设置配置文件名和路径
+	v.SetConfigName("config")
+	v.SetConfigType("yaml")
+	v.AddConfigPath(AbsPath)               // 当前目录
+	v.AddConfigPath(".")                   // 工作目录
+	v.AddConfigPath("/etc/http-services/") // 系统目录
+
+	// 支持环境变量（自动转换：HTTP_SERVICES_SERVER_PORT）
+	v.SetEnvPrefix("HTTP_SERVICES")
+	v.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
+	v.AutomaticEnv()
+
+	// 设置默认值
+	setDefaults()
+
+	// 读取配置文件
+	if err := v.ReadInConfig(); err != nil {
+		if _, ok := err.(viper.ConfigFileNotFoundError); ok {
+			// 配置文件不存在，使用默认值
+			zap.L().Warn("Config file not found, using defaults", zap.String("path", AbsPath))
+		} else {
+			// 配置文件存在但读取失败
+			return fmt.Errorf("failed to read config file: %w", err)
+		}
+	} else {
+		zap.L().Info("Config file loaded", zap.String("file", v.ConfigFileUsed()))
+	}
+
+	// 应用配置到全局变量
+	return applyConfig()
 }
 
-// LoadConfig 从 config.yaml 文件加载配置
-func LoadConfig() error {
-	configPath := filepath.Join(AbsPath, "config.yaml")
-	data, err := os.ReadFile(configPath)
+// setDefaults 设置默认配置值
+func setDefaults() {
+	// Server 默认配置
+	v.SetDefault("server.port", 8080)
+	v.SetDefault("server.max_body_size", "10MB")
+	v.SetDefault("server.max_header_bytes", 1<<20) // 1MB
+	v.SetDefault("server.shutdown_timeout", "10s")
+	v.SetDefault("server.read_timeout", "30s")
+	v.SetDefault("server.write_timeout", "30s")
+	v.SetDefault("server.idle_timeout", "120s")
+	v.SetDefault("server.enable_rate_limit", false)
+	v.SetDefault("server.global_rate_limit", 100)
+	v.SetDefault("server.global_rate_burst", 200)
+
+	// JWT 默认配置
+	v.SetDefault("jwt.expiration", "12h")
+
+	// Log 默认配置
+	v.SetDefault("log.max_size", 50)   // 50MB
+	v.SetDefault("log.max_backups", 3) // 保留 3 个备份
+	v.SetDefault("log.max_age", 30)    // 保留 30 天
+}
+
+// applyConfig 将 Viper 配置应用到全局变量
+func applyConfig() error {
+	// Server 配置
+	ListenPort = v.GetInt("server.port")
+
+	// 解析大小字符串
+	maxBodySizeStr := v.GetString("server.max_body_size")
+	size, err := parseSize(maxBodySizeStr)
 	if err != nil {
-		return fmt.Errorf("failed to read config file: %v", err)
+		return fmt.Errorf("invalid max_body_size: %w", err)
 	}
+	MaxBodySize = size
 
-	var config YamlConfig
-	if err := yaml.Unmarshal(data, &config); err != nil {
-		return fmt.Errorf("failed to parse config file: %v", err)
-	}
+	MaxHeaderBytes = v.GetInt("server.max_header_bytes")
 
-	// 应用配置值
-	if config.Server.Port != 0 {
-		ListenPort = config.Server.Port
-	}
-
-	// 默认值设置
-	MaxBodySize = 10 << 20 // 默认 10MB
-	ShutdownTimeout = 10 * time.Second
-	ReadTimeout = 30 * time.Second
-	WriteTimeout = 30 * time.Second
-	IdleTimeout = 120 * time.Second
-	MaxHeaderBytes = 1 << 20 // 默认 1MB
-	EnableRateLimit = false
-	GlobalRateLimit = 100
-	GlobalRateBurst = 200
-
-	// 解析服务器配置
-	if config.Server.MaxBodySize != "" {
-		size, err := parseSize(config.Server.MaxBodySize)
-		if err != nil {
-			return fmt.Errorf("invalid max_body_size format: %v", err)
-		}
-		MaxBodySize = size
-	}
-
-	if config.Server.ShutdownTimeout != "" {
-		timeout, err := time.ParseDuration(config.Server.ShutdownTimeout)
-		if err != nil {
-			return fmt.Errorf("invalid shutdown_timeout format: %v", err)
-		}
-		ShutdownTimeout = timeout
-	}
-
-	if config.Server.ReadTimeout != "" {
-		timeout, err := time.ParseDuration(config.Server.ReadTimeout)
-		if err != nil {
-			return fmt.Errorf("invalid read_timeout format: %v", err)
-		}
-		ReadTimeout = timeout
-	}
-
-	if config.Server.WriteTimeout != "" {
-		timeout, err := time.ParseDuration(config.Server.WriteTimeout)
-		if err != nil {
-			return fmt.Errorf("invalid write_timeout format: %v", err)
-		}
-		WriteTimeout = timeout
-	}
-
-	if config.Server.IdleTimeout != "" {
-		timeout, err := time.ParseDuration(config.Server.IdleTimeout)
-		if err != nil {
-			return fmt.Errorf("invalid idle_timeout format: %v", err)
-		}
-		IdleTimeout = timeout
-	}
-
-	if config.Server.MaxHeaderBytes != 0 {
-		MaxHeaderBytes = config.Server.MaxHeaderBytes
-	}
+	// 解析超时时间
+	ShutdownTimeout = v.GetDuration("server.shutdown_timeout")
+	ReadTimeout = v.GetDuration("server.read_timeout")
+	WriteTimeout = v.GetDuration("server.write_timeout")
+	IdleTimeout = v.GetDuration("server.idle_timeout")
 
 	// 限流配置
-	EnableRateLimit = config.Server.EnableRateLimit
-	if config.Server.GlobalRateLimit != 0 {
-		GlobalRateLimit = config.Server.GlobalRateLimit
-	}
-	if config.Server.GlobalRateBurst != 0 {
-		GlobalRateBurst = config.Server.GlobalRateBurst
-	}
+	EnableRateLimit = v.GetBool("server.enable_rate_limit")
+	GlobalRateLimit = v.GetInt("server.global_rate_limit")
+	GlobalRateBurst = v.GetInt("server.global_rate_burst")
 
 	// JWT 配置
-	if config.JWT.Key != "" {
-		JWTKey = config.JWT.Key
-	}
+	JWTKey = v.GetString("jwt.key")
+	JWTExpiration = v.GetDuration("jwt.expiration")
 
-	if config.JWT.Expiration != "" {
-		expiration, err := time.ParseDuration(config.JWT.Expiration)
-		if err != nil {
-			return fmt.Errorf("invalid JWT expiration format: %v", err)
-		}
-		JWTExpiration = expiration
-	}
+	// Log 配置
+	LogMaxSize = v.GetInt("log.max_size")
+	LogMaxBackups = v.GetInt("log.max_backups")
+	LogMaxAge = v.GetInt("log.max_age")
 
 	return nil
+}
+
+// WatchConfig 监听配置文件变化并自动重新加载（热重载）
+func WatchConfig(onChange func()) {
+	v.WatchConfig()
+	v.OnConfigChange(func(e fsnotify.Event) {
+		zap.L().Info("Config file changed, reloading...",
+			zap.String("file", e.Name),
+			zap.String("op", e.Op.String()),
+		)
+
+		// 重新应用配置
+		if err := applyConfig(); err != nil {
+			zap.L().Error("Failed to reload config", zap.Error(err))
+			return
+		}
+
+		// 执行回调
+		if onChange != nil {
+			onChange()
+		}
+
+		zap.L().Info("Config reloaded successfully")
+	})
+}
+
+// GetViper 返回 Viper 实例（用于高级用法）
+func GetViper() *viper.Viper {
+	return v
 }
 
 // parseSize 解析大小字符串（支持 KB, MB, GB）
@@ -137,14 +148,14 @@ func parseSize(sizeStr string) (int64, error) {
 		return 0, err
 	}
 
-	switch unit {
-	case "B", "b", "":
+	switch strings.ToUpper(unit) {
+	case "B", "":
 		return size, nil
-	case "KB", "kb", "K", "k":
+	case "KB", "K":
 		return size * 1024, nil
-	case "MB", "mb", "M", "m":
+	case "MB", "M":
 		return size * 1024 * 1024, nil
-	case "GB", "gb", "G", "g":
+	case "GB", "G":
 		return size * 1024 * 1024 * 1024, nil
 	default:
 		return 0, fmt.Errorf("unknown size unit: %s", unit)

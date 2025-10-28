@@ -5,14 +5,15 @@
 ## 项目特点
 
 - ✅ **标准化项目结构** - 清晰的目录组织，易于维护和扩展
-- ✅ **配置文件管理** - 基于 YAML 的配置文件，支持灵活配置
-- ✅ **JWT 认证** - 完整的 Token 签发和验证机制
+- ✅ **Viper 配置管理** - 支持 YAML 配置、环境变量覆盖和热重载
+- ✅ **JWT 认证** - 灵活的 Token 签发和验证机制，支持自定义数据结构
 - ✅ **限流中间件** - 支持基于 IP 和 Token 的灵活限流配置
 - ✅ **日志管理** - 开发/生产模式自动切换，支持日志轮转
 - ✅ **命令行支持** - 基于 Kong 的命令行参数解析
 - ✅ **响应规范化** - 统一的 API 响应格式，符合 Google API 设计指南
 - ✅ **跨域支持** - 内置 CORS 中间件
-- ✅ **优雅关闭** - 支持信号监听和优雅退出
+- ✅ **优雅关闭** - 支持信号监听和优雅退出，自动清理资源
+- ✅ **健康检查** - 内置健康检查和就绪检查端点
 
 ## 目录结构
 
@@ -97,20 +98,119 @@ make run
 
 ## 配置说明
 
-### config.yaml
+项目使用 [Viper](https://github.com/spf13/viper) 进行配置管理，支持 YAML 配置文件、环境变量覆盖和配置热重载。
+
+### 配置文件路径
+
+配置文件 `config.yaml` 按以下优先级查找：
+1. 当前工作目录
+2. 程序所在目录
+3. `/etc/http-services/` 目录
+
+### config.yaml 完整配置
 
 ```yaml
 server:
-  port: 8080              # 服务监听端口
+  port: 8080                      # 服务监听端口
+  max_body_size: "10MB"           # 最大请求体大小
+  max_header_bytes: 1048576       # 最大请求头大小（字节）
+  shutdown_timeout: "10s"         # 优雅关闭超时时间
+  read_timeout: "30s"             # 读取超时
+  write_timeout: "30s"            # 写入超时
+  idle_timeout: "120s"            # 空闲连接超时
+  enable_rate_limit: false        # 是否启用全局限流
+  global_rate_limit: 100          # 全局限流速率（每秒请求数）
+  global_rate_burst: 200          # 全局限流突发数
 
 jwt:
-  key: "YOUR_SECRET_KEY"  # JWT 签名密钥（必须修改！）
-  expiration: "12h"       # Token 过期时间（如：12h, 24h, 30m）
+  key: "YOUR_SECRET_KEY"          # JWT 签名密钥（至少 32 字符，必须修改！）
+  expiration: "12h"               # Token 过期时间（如：12h, 24h, 30m）
+
+log:
+  max_size: 50                    # 单个日志文件最大大小（MB）
+  max_backups: 3                  # 保留的旧日志文件最大数量
+  max_age: 30                     # 保留旧日志文件的最大天数
 ```
 
-### 环境变量
+### 环境变量覆盖
 
-- `model`: 运行模式，可选值 `dev` 或 `release`（命令行参数优先级更高）
+所有配置项都可以通过环境变量覆盖，使用 `HTTP_SERVICES_` 前缀，配置路径用下划线分隔：
+
+```bash
+# 覆盖服务端口
+export HTTP_SERVICES_SERVER_PORT=9090
+
+# 覆盖 JWT 密钥
+export HTTP_SERVICES_JWT_KEY="your-production-secret-key"
+
+# 覆盖超时配置
+export HTTP_SERVICES_SERVER_READ_TIMEOUT="60s"
+
+# 启用全局限流
+export HTTP_SERVICES_SERVER_ENABLE_RATE_LIMIT=true
+
+# 覆盖日志配置
+export HTTP_SERVICES_LOG_MAX_SIZE=100
+export HTTP_SERVICES_LOG_MAX_BACKUPS=5
+export HTTP_SERVICES_LOG_MAX_AGE=60
+
+# 运行服务
+./bin/http-services
+```
+
+**环境变量命名规则：**
+- 前缀：`HTTP_SERVICES_`
+- 嵌套路径：用下划线 `_` 替代点 `.`
+- 示例：`server.port` → `HTTP_SERVICES_SERVER_PORT`
+
+### 配置热重载
+
+服务支持配置热重载功能。修改 `config.yaml` 后，服务会自动检测并重新加载配置，无需重启。
+
+**注意：** 部分配置（如端口、超时等）需要重启服务才能生效，但大部分配置可以热重载。
+
+### Docker 环境变量示例
+
+```dockerfile
+# Dockerfile
+FROM alpine:latest
+WORKDIR /app
+COPY bin/http-services .
+EXPOSE 8080
+CMD ["./http-services"]
+```
+
+```bash
+# 使用环境变量运行容器
+docker run -d \
+  -e HTTP_SERVICES_SERVER_PORT=8080 \
+  -e HTTP_SERVICES_JWT_KEY="production-secret-key-min-32-chars" \
+  -e HTTP_SERVICES_JWT_EXPIRATION="24h" \
+  -e HTTP_SERVICES_SERVER_ENABLE_RATE_LIMIT=true \
+  -p 8080:8080 \
+  your-image:latest
+```
+
+### Kubernetes ConfigMap 示例
+
+```yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: http-services-config
+data:
+  HTTP_SERVICES_SERVER_PORT: "8080"
+  HTTP_SERVICES_JWT_EXPIRATION: "24h"
+  HTTP_SERVICES_SERVER_ENABLE_RATE_LIMIT: "true"
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: http-services-secret
+type: Opaque
+stringData:
+  HTTP_SERVICES_JWT_KEY: "your-production-secret-key-min-32-chars"
+```
 
 ## 开发规范
 
@@ -244,30 +344,84 @@ func privateRouter(router *gin.RouterGroup) {
 
 ### 5. JWT 使用
 
+JWT 使用 `map[string]interface{}` 存储自定义数据，支持灵活的数据结构。
+
 ```go
-// 签发 Token
-token, err := authentication.JWTIssue("user_id")
+// 签发 Token - 使用 map 存储任意数据结构
+userData := map[string]interface{}{
+    "user_id":  "12345",
+    "username": "admin",
+    "role":     "admin",
+    "email":    "admin@example.com",
+}
+token, err := authentication.JWTIssue(userData)
+if err != nil {
+    response.ReturnError(c, response.INTERNAL, "Token 生成失败")
+    return
+}
 
 // 验证 Token（中间件自动处理）
 // 在 handler 中获取 JWT 数据
 jwtData, exists := c.Get("jwtData")
+if !exists {
+    response.ReturnError(c, response.UNAUTHENTICATED, "未找到认证信息")
+    return
+}
+
+// 类型断言获取 map 数据
+data, ok := jwtData.(map[string]interface{})
+if !ok {
+    response.ReturnError(c, response.INTERNAL, "认证数据格式错误")
+    return
+}
+
+// 获取具体字段
+userID := data["user_id"].(string)
+username := data["username"].(string)
 ```
+
+**JWT 最佳实践：**
+
+- Token 中只存储必要的用户标识信息，不要存储敏感数据
+- 根据实际业务需求设计 Token 数据结构
+- 建议在项目中定义统一的 Token 数据结构规范
 
 ## 日志管理
 
 ### 开发模式（`-d` 参数）
+
 - 日志输出到控制台
 - 彩色格式，易于阅读
 - Debug 级别日志
 
 ### 生产模式（默认）
+
 - 日志输出到文件 `log/http-services.log`
 - JSON 格式，便于日志分析
 - Info 级别日志
-- 自动轮转：
-  - 单文件最大 50MB
-  - 最多保留 3 个备份文件
-  - 保留 30 天
+- 自动轮转（可通过配置文件或环境变量自定义）：
+  - 单文件最大大小：默认 50MB（可配置 `log.max_size`）
+  - 最多保留备份数：默认 3 个（可配置 `log.max_backups`）
+  - 保留天数：默认 30 天（可配置 `log.max_age`）
+
+### 自定义日志配置
+
+通过配置文件：
+
+```yaml
+log:
+  max_size: 100      # 单个日志文件最大 100MB
+  max_backups: 5     # 保留 5 个备份文件
+  max_age: 60        # 保留 60 天
+```
+
+通过环境变量：
+
+```bash
+export HTTP_SERVICES_LOG_MAX_SIZE=100
+export HTTP_SERVICES_LOG_MAX_BACKUPS=5
+export HTTP_SERVICES_LOG_MAX_AGE=60
+```
 
 ### 使用示例
 
@@ -310,6 +464,22 @@ make tidy      # 整理依赖
 ```
 
 ## API 示例
+
+### 健康检查
+
+```bash
+# 健康检查（用于 k8s liveness probe）
+curl http://localhost:8080/health
+
+# 响应：{"status":"ok"}
+```
+
+```bash
+# 就绪检查（用于 k8s readiness probe）
+curl http://localhost:8080/ready
+
+# 响应：{"status":"ready","uptime":"1h30m20s"}
+```
 
 ### 获取 Token
 
@@ -397,6 +567,78 @@ EXPOSE 8080
 CMD ["./http-services"]
 ```
 
+### 4. Kubernetes 部署示例
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: http-services
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: http-services
+  template:
+    metadata:
+      labels:
+        app: http-services
+    spec:
+      containers:
+      - name: http-services
+        image: your-registry/http-services:latest
+        ports:
+        - containerPort: 8080
+        env:
+        - name: HTTP_SERVICES_SERVER_PORT
+          value: "8080"
+        - name: HTTP_SERVICES_JWT_KEY
+          valueFrom:
+            secretKeyRef:
+              name: http-services-secret
+              key: HTTP_SERVICES_JWT_KEY
+        - name: HTTP_SERVICES_JWT_EXPIRATION
+          value: "24h"
+        - name: HTTP_SERVICES_SERVER_ENABLE_RATE_LIMIT
+          value: "true"
+        # 健康检查配置
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: http-services
+spec:
+  type: ClusterIP
+  selector:
+    app: http-services
+  ports:
+  - port: 8080
+    targetPort: 8080
+```
+
 ## 性能建议
 
 1. **生产环境使用 Release 模式** - 日志写入文件，性能更好
@@ -408,13 +650,15 @@ CMD ["./http-services"]
 ## 依赖项
 
 主要依赖：
+
 - `gin-gonic/gin` - Web 框架
 - `golang-jwt/jwt` - JWT 认证
 - `uber-go/zap` - 日志库
+- `spf13/viper` - 配置管理
 - `golang.org/x/time/rate` - 限流器
 - `alecthomas/kong` - 命令行解析
-- `goccy/go-yaml` - YAML 配置解析
 - `sony/sonyflake` - 分布式 ID 生成
+- `natefinch/lumberjack` - 日志轮转
 
 ## 许可证
 
