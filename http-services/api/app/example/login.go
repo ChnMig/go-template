@@ -3,7 +3,7 @@ package example
 import (
 	"http-services/api/middleware"
 	"http-services/api/response"
-	"http-services/util/authentication"
+	"http-services/utils/authentication"
 
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"

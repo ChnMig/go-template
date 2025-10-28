@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"http-services/api"
 	"http-services/config"
-	"http-services/util/log"
+	"http-services/utils/log"
 	"os"
 	"os/signal"
 	"syscall"

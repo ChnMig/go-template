@@ -4,7 +4,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"http-services/api/response"
-	"http-services/util/authentication"
+	"http-services/utils/authentication"
 )
 
 // TokenVerify Get the token and verify its validity

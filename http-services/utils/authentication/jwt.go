@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"http-services/config"
-	"http-services/util/id"
+	"http-services/utils/id"
 
 	"github.com/golang-jwt/jwt/v5"
 )

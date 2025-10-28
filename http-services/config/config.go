@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"time"
 
-	pathtool "http-services/util/path-tool"
+	pathtool "http-services/utils/path-tool"
 )
 
 // Here are some basic configurations

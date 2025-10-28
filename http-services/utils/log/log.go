@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"http-services/config"
-	runmodel "http-services/util/run-model"
+	runmodel "http-services/utils/run-model"
 
 	"github.com/fsnotify/fsnotify"
 	"go.uber.org/zap"
