@@ -7,6 +7,7 @@ import (
 	"http-services/config"
 
 	"github.com/gin-gonic/gin"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 // open
@@ -36,7 +37,7 @@ func InitApi() *gin.Engine {
 	// https://pkg.go.dev/github.com/gin-gonic/gin#readme-don-t-trust-all-proxies
 	router.SetTrustedProxies(nil)
 
-	// 全局中间件（按推荐顺序：限流 → 安全 → 请求ID → 跨域）
+	// 全局中间件（按推荐顺序：限流 → 安全 → 请求ID → 监控 → 跨域）
 	// 1. 全局限流（如果启用）- 最先执行，防止恶意请求消耗资源
 	if config.EnableRateLimit {
 		router.Use(middleware.IPRateLimit(config.GlobalRateLimit, config.GlobalRateBurst))
@@ -48,15 +49,21 @@ func InitApi() *gin.Engine {
 	// 3. 请求 ID 追踪 - 用于日志关联
 	router.Use(middleware.RequestID())
 
-	// 4. 请求体大小限制 - 使用配置值
+	// 4. Prometheus 监控 - 记录请求指标
+	router.Use(middleware.Metrics())
+
+	// 5. 请求体大小限制 - 使用配置值
 	router.Use(middleware.BodySizeLimit(config.MaxBodySize))
 
-	// 5. 跨域处理 - 在业务逻辑前处理
+	// 6. 跨域处理 - 在业务逻辑前处理
 	router.Use(middleware.CorssDomainHandler())
 
 	// 健康检查端点（不需要认证，不受限流影响）
 	router.GET("/health", health.Health)
 	router.GET("/ready", health.Ready)
+
+	// Prometheus metrics 端点
+	router.GET("/metrics", gin.WrapH(promhttp.Handler()))
 
 	// static
 	router.Static("/static", "./static")

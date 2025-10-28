@@ -70,6 +70,15 @@ func main() {
 	log.GetLogger()
 	log.StartMonitor() // 启动日志文件监控
 
+	// 启动配置热重载（在日志初始化之后）
+	config.WatchConfig(func() {
+		zap.L().Info("Configuration reloaded",
+			zap.Int("port", config.ListenPort),
+			zap.Duration("jwt_expiration", config.JWTExpiration),
+			zap.Bool("rate_limit_enabled", config.EnableRateLimit),
+		)
+	})
+
 	// 校验配置
 	config.CheckConfig(
 		config.JWTKey,

@@ -17,6 +17,13 @@ type limiterEntry struct {
 	lastAccess time.Time
 }
 
+// 限流器配置常量
+const (
+	MaxLimiters     = 10000           // 最大限流器数量，防止内存无限增长
+	DefaultTTL      = 5 * time.Minute // 默认过期时间，缩短 TTL 减少内存占用
+	CleanupInterval = 2 * time.Minute // 清理间隔，提高清理频率
+)
+
 // RateLimiter 限流管理器
 type RateLimiter struct {
 	mu       sync.RWMutex
@@ -34,11 +41,11 @@ func NewRateLimiter(r, b int) *RateLimiter {
 		limiters: make(map[string]*limiterEntry),
 		rate:     r,
 		burst:    b,
-		ttl:      10 * time.Minute, // 10分钟未访问则清理
+		ttl:      DefaultTTL,
 		stopChan: make(chan struct{}),
 	}
 	// 启动自动清理
-	rl.startCleanup(5 * time.Minute)
+	rl.startCleanup(CleanupInterval)
 	return rl
 }
 
@@ -49,6 +56,16 @@ func (rl *RateLimiter) getLimiter(key string) *rate.Limiter {
 
 	entry, exists := rl.limiters[key]
 	if !exists {
+		// 检查是否超过最大限流器数量
+		if len(rl.limiters) >= MaxLimiters {
+			// 达到上限时，立即触发清理
+			rl.cleanupLocked()
+			// 如果清理后仍然达到上限，删除最旧的条目
+			if len(rl.limiters) >= MaxLimiters {
+				rl.removeOldestLocked()
+			}
+		}
+
 		limiter := rate.NewLimiter(rate.Limit(rl.rate), rl.burst)
 		rl.limiters[key] = &limiterEntry{
 			limiter:    limiter,
@@ -72,12 +89,39 @@ func (rl *RateLimiter) allow(key string) bool {
 func (rl *RateLimiter) cleanup() {
 	rl.mu.Lock()
 	defer rl.mu.Unlock()
+	rl.cleanupLocked()
+}
 
+// cleanupLocked 清理过期的限流器（需要持有锁）
+func (rl *RateLimiter) cleanupLocked() {
 	now := time.Now()
 	for key, entry := range rl.limiters {
 		if now.Sub(entry.lastAccess) > rl.ttl {
 			delete(rl.limiters, key)
 		}
+	}
+}
+
+// removeOldestLocked 删除最旧的限流器条目（需要持有锁）
+func (rl *RateLimiter) removeOldestLocked() {
+	if len(rl.limiters) == 0 {
+		return
+	}
+
+	var oldestKey string
+	var oldestTime time.Time
+	first := true
+
+	for key, entry := range rl.limiters {
+		if first || entry.lastAccess.Before(oldestTime) {
+			oldestKey = key
+			oldestTime = entry.lastAccess
+			first = false
+		}
+	}
+
+	if oldestKey != "" {
+		delete(rl.limiters, oldestKey)
 	}
 }
 
@@ -102,6 +146,27 @@ func (rl *RateLimiter) Stop() {
 	close(rl.stopChan)
 }
 
+// Stats 限流器统计信息
+type Stats struct {
+	TotalLimiters int           // 当前限流器总数
+	Rate          int           // 配置的速率
+	Burst         int           // 配置的突发量
+	TTL           time.Duration // 配置的过期时间
+}
+
+// GetStats 获取限流器统计信息
+func (rl *RateLimiter) GetStats() Stats {
+	rl.mu.RLock()
+	defer rl.mu.RUnlock()
+
+	return Stats{
+		TotalLimiters: len(rl.limiters),
+		Rate:          rl.rate,
+		Burst:         rl.burst,
+		TTL:           rl.ttl,
+	}
+}
+
 // limiters 全局限流器缓存，key 为 "rate-burst" 组合
 var (
 	limiterCache = make(map[string]*RateLimiter)
@@ -118,6 +183,18 @@ func CleanupAllLimiters() {
 	}
 	// 清空缓存
 	limiterCache = make(map[string]*RateLimiter)
+}
+
+// GetAllStats 获取所有限流器的统计信息
+func GetAllStats() map[string]Stats {
+	cacheMu.RLock()
+	defer cacheMu.RUnlock()
+
+	result := make(map[string]Stats)
+	for key, limiter := range limiterCache {
+		result[key] = limiter.GetStats()
+	}
+	return result
 }
 
 // getLimiterFromCache 从缓存中获取或创建限流器
