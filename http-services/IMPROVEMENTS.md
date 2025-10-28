@@ -7,7 +7,8 @@
 1. ✅ 结构化日志上下文
 2. ✅ Response 追踪增强
 3. ✅ 配置管理优化
-4. ✅ 测试覆盖率提升
+4. ✅ CI/CD 集成（国内网络优化）
+5. ✅ 测试覆盖率提升
 
 ---
 
@@ -110,7 +111,66 @@ export HTTP_SERVICES_LOG_MAX_SIZE=100
 
 ---
 
-## 4. 测试覆盖率提升
+## 4. CI/CD 集成
+
+### 新增文件
+- `.github/workflows/test.yml` - GitHub Actions 工作流
+- `.github/CI_README.md` - CI/CD 配置文档
+- `http-services/.golangci.yml` - golangci-lint 配置
+
+### 国内网络优化 🚀
+
+**核心优化：配置 Go 模块代理**
+
+所有 CI 作业都配置了国内镜像加速：
+```bash
+GOPROXY=https://goproxy.cn,https://mirrors.aliyun.com/goproxy/,https://goproxy.io,direct
+GOSUMDB=sum.golang.google.cn
+```
+
+**使用的镜像源：**
+1. **goproxy.cn** - 七牛云维护，国内最快
+2. **mirrors.aliyun.com/goproxy** - 阿里云镜像，稳定可靠
+3. **goproxy.io** - 全球 CDN，备用
+4. **direct** - 官方源（最后备选）
+
+### CI 流程
+
+#### 1. 测试作业 (Test Job)
+- 支持多 Go 版本测试 (1.23.x, 1.24.x, 1.25.x)
+- 配置国内代理加速模块下载
+- 运行 `go vet` 静态分析
+- 运行单元测试和集成测试（带 race 检测）
+- 生成测试覆盖率报告
+- 上传到 Codecov（可选，需配置 CODECOV_TOKEN）
+- 覆盖率低于 50% 时发出警告
+
+#### 2. 代码检查 (Lint Job)
+- 使用 golangci-lint 进行代码质量检查
+- 检查代码风格、潜在问题、代码重复等
+- 配置国内镜像加速
+
+#### 3. 构建作业 (Build Job)
+- 构建可执行文件
+- 注入版本信息
+- 上传构建产物（保留 7 天）
+
+#### 4. 安全扫描 (Security Job)
+- 使用 Gosec 扫描安全漏洞
+- 生成 SARIF 报告
+- 集成到 GitHub Security
+
+### 缓存策略
+
+使用 GitHub Actions 缓存：
+- Go 模块目录 (`~/go/pkg/mod`)
+- Go 构建缓存 (`~/.cache/go-build`)
+
+缓存基于 Go 版本和 `go.sum` 文件，确保依赖更新时重新下载。
+
+---
+
+## 5. 测试覆盖率提升
 
 ### 新增测试文件
 - `config/load_test.go` - 配置加载测试 (75% 覆盖率)
@@ -144,7 +204,7 @@ go tool cover -html=coverage.out
 
 ---
 
-## 5. 开发工作流改进
+## 6. 开发工作流改进
 
 ### 代码检查
 ```bash
@@ -175,7 +235,7 @@ HTTP_SERVICES_SERVER_PORT=9090 make dev
 
 ---
 
-## 6. 最佳实践建议
+## 7. 最佳实践建议
 
 ### 错误处理
 1. 使用 `response.ReturnError()` 返回错误响应
@@ -204,7 +264,7 @@ HTTP_SERVICES_SERVER_PORT=9090 make dev
 
 ---
 
-## 7. 迁移指南
+## 8. 迁移指南
 
 ### 现有代码迁移
 
@@ -230,7 +290,7 @@ func Handler(c *gin.Context) {
 
 ---
 
-## 8. 后续优化建议
+## 9. 后续优化建议
 
 ### 高优先级
 - [ ] 添加 Prometheus metrics 端点

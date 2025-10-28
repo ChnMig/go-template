@@ -1,0 +1,186 @@
+name: Test
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        go-version: [ '1.23.x', '1.24.x', '1.25.x' ]
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: ${{ matrix.go-version }}
+        cache-dependency-path: http-services/go.sum
+
+    # 配置 Go 模块代理（国内镜像加速）
+    - name: Configure Go proxy for China
+      run: |
+        go env -w GO111MODULE=on
+        go env -w GOPROXY=https://goproxy.cn,https://mirrors.aliyun.com/goproxy/,https://goproxy.io,direct
+        go env -w GOSUMDB=sum.golang.google.cn
+        echo "GOPROXY=$(go env GOPROXY)"
+        echo "GOSUMDB=$(go env GOSUMDB)"
+
+    - name: Cache Go modules
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cache/go-build
+          ~/go/pkg/mod
+        key: ${{ runner.os }}-go-${{ matrix.go-version }}-${{ hashFiles('http-services/go.sum') }}
+        restore-keys: |
+          ${{ runner.os }}-go-${{ matrix.go-version }}-
+
+    - name: Download dependencies
+      working-directory: ./http-services
+      run: |
+        go mod download
+        go mod verify
+
+    - name: Run go vet
+      working-directory: ./http-services
+      run: go vet ./...
+
+    - name: Run tests
+      working-directory: ./http-services
+      run: go test -v -race -coverprofile=coverage.out -covermode=atomic ./...
+
+    - name: Generate coverage report
+      working-directory: ./http-services
+      run: |
+        go tool cover -func=coverage.out
+        COVERAGE=$(go tool cover -func=coverage.out | grep total | awk '{print $3}' | sed 's/%//')
+        echo "Total coverage: $COVERAGE%"
+        echo "COVERAGE=$COVERAGE" >> $GITHUB_ENV
+
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v4
+      with:
+        files: ./http-services/coverage.out
+        flags: unittests
+        name: codecov-umbrella
+        fail_ci_if_error: false
+        token: ${{ secrets.CODECOV_TOKEN }}
+
+    - name: Check coverage threshold
+      working-directory: ./http-services
+      run: |
+        COVERAGE=$(go tool cover -func=coverage.out | grep total | awk '{print $3}' | sed 's/%//')
+        echo "Total coverage: $COVERAGE%"
+        # 如果覆盖率低于 50%，给出警告（不失败）
+        if (( $(echo "$COVERAGE < 50" | bc -l) )); then
+          echo "::warning::Test coverage is below 50% ($COVERAGE%)"
+        fi
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.25.x'
+        cache-dependency-path: http-services/go.sum
+
+    # 配置 Go 模块代理（国内镜像加速）
+    - name: Configure Go proxy for China
+      run: |
+        go env -w GO111MODULE=on
+        go env -w GOPROXY=https://goproxy.cn,https://mirrors.aliyun.com/goproxy/,https://goproxy.io,direct
+        go env -w GOSUMDB=sum.golang.google.cn
+
+    - name: Run golangci-lint
+      uses: golangci/golangci-lint-action@v6
+      with:
+        version: latest
+        working-directory: http-services
+        args: --timeout=5m
+
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.25.x'
+        cache-dependency-path: http-services/go.sum
+
+    # 配置 Go 模块代理（国内镜像加速）
+    - name: Configure Go proxy for China
+      run: |
+        go env -w GO111MODULE=on
+        go env -w GOPROXY=https://goproxy.cn,https://mirrors.aliyun.com/goproxy/,https://goproxy.io,direct
+        go env -w GOSUMDB=sum.golang.google.cn
+
+    - name: Build
+      working-directory: ./http-services
+      run: |
+        VERSION=$(git describe --tags --always --dirty 2>/dev/null || echo "dev")
+        BUILD_TIME=$(date -u '+%Y-%m-%d_%H:%M:%S')
+        GIT_COMMIT=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
+
+        go build \
+          -ldflags "-X main.Version=$VERSION -X main.BuildTime=$BUILD_TIME -X main.GitCommit=$GIT_COMMIT" \
+          -o bin/http-services \
+          .
+
+    - name: Upload build artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: http-services-binary-${{ runner.os }}
+        path: http-services/bin/http-services
+        retention-days: 7
+
+  security:
+    name: Security Scan
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.25.x'
+        cache-dependency-path: http-services/go.sum
+
+    # 配置 Go 模块代理（国内镜像加速）
+    - name: Configure Go proxy for China
+      run: |
+        go env -w GO111MODULE=on
+        go env -w GOPROXY=https://goproxy.cn,https://mirrors.aliyun.com/goproxy/,https://goproxy.io,direct
+        go env -w GOSUMDB=sum.golang.google.cn
+
+    - name: Run Gosec Security Scanner
+      uses: securego/gosec@master
+      with:
+        args: '-no-fail -fmt sarif -out results.sarif ./http-services/...'
+
+    - name: Upload SARIF file
+      uses: github/codeql-action/upload-sarif@v3
+      with:
+        sarif_file: results.sarif
+      if: always()

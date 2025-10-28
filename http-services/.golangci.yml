@@ -1,0 +1,133 @@
+# golangci-lint 配置文件
+# 文档: https://golangci-lint.run/usage/configuration/
+
+linters-settings:
+  errcheck:
+    check-type-assertions: true
+    check-blank: true
+
+  govet:
+    enable-all: true
+    disable:
+      - shadow  # 变量遮蔽检查过于严格
+
+  gocyclo:
+    min-complexity: 15  # 圈复杂度阈值
+
+  dupl:
+    threshold: 100  # 重复代码检测阈值
+
+  goconst:
+    min-len: 3
+    min-occurrences: 3  # 字符串重复3次以上建议提取为常量
+
+  misspell:
+    locale: US
+
+  lll:
+    line-length: 120  # 单行最大长度
+
+  goimports:
+    local-prefixes: http-services  # 本地包前缀
+
+  gocritic:
+    enabled-tags:
+      - diagnostic
+      - experimental
+      - opinionated
+      - performance
+      - style
+
+  revive:
+    rules:
+      - name: exported
+        disabled: false
+        arguments:
+          - "checkPrivateReceivers"
+          - "disableStutteringCheck"
+
+linters:
+  disable-all: true
+  enable:
+    # 必须启用的基础 linter
+    - errcheck      # 检查未处理的错误
+    - gosimple      # 简化代码建议
+    - govet         # 报告可疑的代码
+    - ineffassign   # 检测无效的赋值
+    - staticcheck   # 静态分析检查
+    - typecheck     # 类型检查
+    - unused        # 检查未使用的代码
+
+    # 代码风格
+    - gofmt         # 检查代码格式
+    - goimports     # 检查和修复 import 顺序
+    - misspell      # 拼写检查
+    - revive        # 快速、可配置的 Go linter
+
+    # 代码质量
+    - goconst       # 检查可以提取为常量的字符串
+    - gocritic      # 最全面的 Go 代码审查工具
+    - gocyclo       # 计算和检查函数的圈复杂度
+    - dupl          # 检测重复代码
+
+issues:
+  exclude-rules:
+    # 排除测试文件的某些检查
+    - path: _test\.go
+      linters:
+        - errcheck    # 测试中可以不检查所有错误
+        - dupl        # 测试代码允许重复
+        - goconst     # 测试代码不强制提取常量
+        - gocyclo     # 测试代码复杂度不限制
+
+    # 排除 vendor 目录
+    - path: vendor/
+      linters:
+        - all
+
+    # 排除自动生成的代码
+    - path: ".*\\.pb\\.go$"
+      linters:
+        - all
+
+  # 每个 linter 最多显示问题数（0 = 不限制）
+  max-issues-per-linter: 0
+
+  # 相同问题最多显示次数（0 = 不限制）
+  max-same-issues: 0
+
+run:
+  # 超时时间
+  timeout: 5m
+
+  # 是否检查测试文件
+  tests: true
+
+  # 构建标签
+  build-tags:
+    - integration
+
+  # 跳过的目录
+  skip-dirs:
+    - vendor
+    - bin
+    - log
+    - .git
+
+  # 跳过的文件
+  skip-files:
+    - ".*\\.pb\\.go$"
+
+  # 允许多个并行运行
+  allow-parallel-runners: true
+
+output:
+  # 输出格式: colored-line-number|line-number|json|tab|checkstyle|code-climate
+  format: colored-line-number
+
+  # 打印 linter 名称
+  print-issued-lines: true
+  print-linter-name: true
+
+  # 对结果排序
+  sort-results: true
