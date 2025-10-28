@@ -36,10 +36,10 @@ func InitApi() *gin.Engine {
 	router.SetTrustedProxies(nil)
 
 	// 全局中间件
-	router.Use(middleware.RequestID())              // 请求 ID 追踪
-	router.Use(middleware.SecurityHeaders())        // 安全响应头
-	router.Use(middleware.BodySizeLimit(10 << 20))  // 请求体大小限制 (10MB)
-	router.Use(middleware.CorssDomainHandler())     // 跨域处理
+	router.Use(middleware.RequestID())             // 请求 ID 追踪
+	router.Use(middleware.SecurityHeaders())       // 安全响应头
+	router.Use(middleware.BodySizeLimit(10 << 20)) // 请求体大小限制 (10MB)
+	router.Use(middleware.CorssDomainHandler())    // 跨域处理
 
 	// 健康检查端点（不需要认证）
 	router.GET("/health", health.Health)

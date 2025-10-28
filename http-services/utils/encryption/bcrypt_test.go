@@ -56,9 +56,9 @@ func TestVerifyBcryptPassword(t *testing.T) {
 
 func TestIsBcryptHash(t *testing.T) {
 	tests := []struct {
-		name  string
-		hash  string
-		want  bool
+		name string
+		hash string
+		want bool
 	}{
 		{
 			name: "valid bcrypt hash with $2a",

@@ -9,16 +9,9 @@ import (
 
 var flake *sonyflake.Sonyflake
 
-func initSonyFlake() {
-	flake = sonyflake.NewSonyflake(sonyflake.Settings{})
-}
-
-// IssueID Unique ID generated using Sony's improved twite snowflake algorithm
+// IssueID 生成唯一 ID (基于 Sony 改进的 Snowflake 算法)
 // https://github.com/sony/sonyflake
 func IssueID() string {
-	if flake == nil {
-		initSonyFlake()
-	}
 	id, _ := flake.NextID()
 	return fmt.Sprintf("%v", id)
 }

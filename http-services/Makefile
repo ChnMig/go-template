@@ -40,6 +40,19 @@ version: ## 显示版本信息
 test: ## 运行测试
 	@go test -v ./...
 
+test-cover: ## 运行测试并显示覆盖率
+	@go test -cover ./...
+
+fmt: ## 格式化代码
+	@echo "格式化代码..."
+	@gofmt -w $$(find . -name "*.go" -not -path "./vendor/*")
+	@echo "✓ 格式化完成"
+
+lint: ## 运行代码检查
+	@echo "运行 go vet..."
+	@go vet ./...
+	@echo "✓ 检查完成"
+
 tidy: ## 整理依赖
 	@go mod tidy
 	@go mod vendor

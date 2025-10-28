@@ -133,9 +133,9 @@ var UNAVAILABLE = responseData{
 
 // The request is past the deadline.
 // This occurs only if the caller sets a deadline that is shorter than the default deadline for the method (the server was unable to process the request by the deadline) and the request did not complete within the deadline.
-var DEALINE_EXCEED = responseData{
+var DEADLINE_EXCEEDED = responseData{
 	Code:        504,
-	Status:      "DEALINE_EXCEED",
+	Status:      "DEADLINE_EXCEEDED",
 	Description: "Request deadline exceeded",
 }
 

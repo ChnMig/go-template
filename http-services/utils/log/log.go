@@ -102,6 +102,10 @@ func init() {
 }
 
 // StartMonitor 启动日志文件监控（需在初始化后调用）
+// 注意：仅在生产模式下启动监控，开发模式输出到终端，不需要监控
 func StartMonitor() {
-	go monitorFile()
+	// 只在生产模式下启动文件监控
+	if runmodel.IsRelease() {
+		go monitorFile()
+	}
 }
