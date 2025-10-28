@@ -3,7 +3,7 @@ package middleware
 import (
 	"strconv"
 
-	"go-services/config"
+	"http-services/config"
 
 	"github.com/gin-gonic/gin"
 )

@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"time"
 
-	"go-services/config"
-	"go-services/util/id"
+	"http-services/config"
+	"http-services/util/id"
 
 	"github.com/golang-jwt/jwt/v5"
 )

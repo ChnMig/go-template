@@ -4,8 +4,8 @@ import (
 	"os"
 	"time"
 
-	"go-services/config"
-	runmodel "go-services/util/run-model"
+	"http-services/config"
+	runmodel "http-services/util/run-model"
 
 	"github.com/fsnotify/fsnotify"
 	"go.uber.org/zap"

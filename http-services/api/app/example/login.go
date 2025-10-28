@@ -1,9 +1,9 @@
 package example
 
 import (
-	"go-services/api/middleware"
-	"go-services/api/response"
-	"go-services/util/authentication"
+	"http-services/api/middleware"
+	"http-services/api/response"
+	"http-services/util/authentication"
 
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"

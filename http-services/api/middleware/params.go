@@ -4,7 +4,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/gin-gonic/gin/binding"
 
-	"go-services/api/response"
+	"http-services/api/response"
 )
 
 // param verify

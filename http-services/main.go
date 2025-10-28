@@ -2,9 +2,9 @@ package main
 
 import (
 	"fmt"
-	"go-services/api"
-	"go-services/config"
-	"go-services/util/log"
+	"http-services/api"
+	"http-services/config"
+	"http-services/util/log"
 	"os"
 	"os/signal"
 	"syscall"

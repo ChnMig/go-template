@@ -1,7 +1,7 @@
 package runmodel
 
 import (
-	"go-services/config"
+	"http-services/config"
 	"os"
 )
 

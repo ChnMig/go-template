@@ -49,7 +49,7 @@ jwt:
 ### 访问配置
 在代码中直接使用 `config.XXX` 访问配置变量，例如：
 ```go
-import "go-services/config"
+import "http-services/config"
 
 func example() {
     key := config.JWTKey

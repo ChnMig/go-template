@@ -8,7 +8,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"golang.org/x/time/rate"
 
-	"go-services/api/response"
+	"http-services/api/response"
 )
 
 // limiterEntry 限流器条目，包含限流器和最后访问时间
@@ -122,10 +122,10 @@ func getLimiterFromCache(r, b int) *RateLimiter {
 
 // RateLimitOptions 限流配置选项
 type RateLimitOptions struct {
-	Rate    int    // 每秒请求数
-	Burst   int    // 突发请求数
+	Rate    int                       // 每秒请求数
+	Burst   int                       // 突发请求数
 	KeyFunc func(*gin.Context) string // 自定义获取限流 key 的函数
-	Message string // 自定义错误消息
+	Message string                    // 自定义错误消息
 }
 
 // IPRateLimit IP 限流中间件（可指定速率）
@@ -134,7 +134,8 @@ type RateLimitOptions struct {
 //   - b: 突发请求数（burst），例如 20 表示桶最大容量为 20
 //
 // 示例：
-//   middleware.IPRateLimit(10, 20)  // 每秒10个请求，突发20个
+//
+//	middleware.IPRateLimit(10, 20)  // 每秒10个请求，突发20个
 func IPRateLimit(r, b int) gin.HandlerFunc {
 	limiter := getLimiterFromCache(r, b)
 
@@ -163,7 +164,8 @@ func IPRateLimit(r, b int) gin.HandlerFunc {
 //   - 需要在 TokenVerify 中间件之后使用
 //
 // 示例：
-//   middleware.TokenRateLimit(100, 200)  // 每秒100个请求，突发200个
+//
+//	middleware.TokenRateLimit(100, 200)  // 每秒100个请求，突发200个
 func TokenRateLimit(r, b int) gin.HandlerFunc {
 	limiter := getLimiterFromCache(r, b)
 
@@ -186,15 +188,16 @@ func TokenRateLimit(r, b int) gin.HandlerFunc {
 //   - opts: 限流配置选项
 //
 // 示例：
-//   middleware.RateLimitWithOptions(middleware.RateLimitOptions{
-//       Rate: 50,
-//       Burst: 100,
-//       KeyFunc: func(c *gin.Context) string {
-//           // 自定义 key 生成逻辑，例如按 API Key 限流
-//           return c.GetHeader("X-API-Key")
-//       },
-//       Message: "API rate limit exceeded",
-//   })
+//
+//	middleware.RateLimitWithOptions(middleware.RateLimitOptions{
+//	    Rate: 50,
+//	    Burst: 100,
+//	    KeyFunc: func(c *gin.Context) string {
+//	        // 自定义 key 生成逻辑，例如按 API Key 限流
+//	        return c.GetHeader("X-API-Key")
+//	    },
+//	    Message: "API rate limit exceeded",
+//	})
 func RateLimitWithOptions(opts RateLimitOptions) gin.HandlerFunc {
 	limiter := getLimiterFromCache(opts.Rate, opts.Burst)
 

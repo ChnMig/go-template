@@ -1,4 +1,4 @@
-module go-services
+module http-services
 
 go 1.25.3
 
