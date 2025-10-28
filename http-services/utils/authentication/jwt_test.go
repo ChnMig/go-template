@@ -16,7 +16,11 @@ func init() {
 }
 
 func TestJWTIssueAndDecrypt(t *testing.T) {
-	testData := "test-user-id-123"
+	testData := map[string]interface{}{
+		"user_id":  "123",
+		"username": "test_user",
+		"role":     "admin",
+	}
 
 	// 测试签发 token
 	token, err := JWTIssue(testData)
@@ -34,8 +38,15 @@ func TestJWTIssueAndDecrypt(t *testing.T) {
 		t.Fatalf("JWTDecrypt failed: %v", err)
 	}
 
-	if data != testData {
-		t.Errorf("JWTDecrypt returned wrong data: got %s, want %s", data, testData)
+	// 验证数据
+	if data["user_id"] != testData["user_id"] {
+		t.Errorf("user_id mismatch: got %v, want %v", data["user_id"], testData["user_id"])
+	}
+	if data["username"] != testData["username"] {
+		t.Errorf("username mismatch: got %v, want %v", data["username"], testData["username"])
+	}
+	if data["role"] != testData["role"] {
+		t.Errorf("role mismatch: got %v, want %v", data["role"], testData["role"])
 	}
 }
 
@@ -49,8 +60,8 @@ func TestJWTDecryptInvalidToken(t *testing.T) {
 
 func TestJWTDecryptExpiredToken(t *testing.T) {
 	// 创建一个已经过期的自定义 claims
-	claims := MyCustomClaims{
-		Data: "test-data",
+	claims := MapClaims{
+		Data: map[string]interface{}{"user_id": "123"},
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(-1 * time.Hour)), // 1小时前过期
 			IssuedAt:  jwt.NewNumericDate(time.Now().Add(-2 * time.Hour)), // 2小时前签发
@@ -109,8 +120,8 @@ func TestPrepareRegisteredClaims(t *testing.T) {
 }
 
 func TestSignAndParseHS256(t *testing.T) {
-	claims := &MyCustomClaims{
-		Data: "test-data",
+	claims := &MapClaims{
+		Data: map[string]interface{}{"user_id": "test-123"},
 	}
 	PrepareRegisteredClaims(&claims.RegisteredClaims)
 
@@ -121,7 +132,7 @@ func TestSignAndParseHS256(t *testing.T) {
 	}
 
 	// 测试解析
-	parsedClaims := &MyCustomClaims{}
+	parsedClaims := &MapClaims{}
 	token, err := ParseHS256(tokenString, parsedClaims)
 	if err != nil {
 		t.Fatalf("ParseHS256 failed: %v", err)
@@ -131,7 +142,7 @@ func TestSignAndParseHS256(t *testing.T) {
 		t.Error("Token should be valid")
 	}
 
-	if parsedClaims.Data != claims.Data {
-		t.Errorf("Data mismatch: got %s, want %s", parsedClaims.Data, claims.Data)
+	if parsedClaims.Data["user_id"] != claims.Data["user_id"] {
+		t.Errorf("Data mismatch: got %v, want %v", parsedClaims.Data["user_id"], claims.Data["user_id"])
 	}
 }

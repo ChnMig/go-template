@@ -4,6 +4,21 @@
 server:
   port: 8080
 
+  # 请求限制配置
+  max_body_size: "10MB"           # 请求体大小限制，支持 KB/MB/GB
+  max_header_bytes: 1048576       # 请求头大小限制（字节），默认 1MB
+
+  # 超时配置
+  shutdown_timeout: "10s"         # 优雅关闭超时时间
+  read_timeout: "30s"             # 读取超时
+  write_timeout: "30s"            # 写入超时
+  idle_timeout: "120s"            # 空闲连接超时
+
+  # 全局限流配置（可选）
+  enable_rate_limit: false        # 是否启用全局限流
+  global_rate_limit: 100          # 全局限流速率（每秒请求数）
+  global_rate_burst: 200          # 全局限流突发容量
+
 jwt:
   key: "YOUR_SECRET_KEY_HERE"  # 务必修改此密钥，否则存在安全风险
   expiration: "12h"  # JWT token 过期时间，格式: 12h, 24h, 30m 等

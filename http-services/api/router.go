@@ -4,6 +4,7 @@ import (
 	"http-services/api/app/example"
 	"http-services/api/app/health"
 	"http-services/api/middleware"
+	"http-services/config"
 
 	"github.com/gin-gonic/gin"
 )
@@ -35,13 +36,25 @@ func InitApi() *gin.Engine {
 	// https://pkg.go.dev/github.com/gin-gonic/gin#readme-don-t-trust-all-proxies
 	router.SetTrustedProxies(nil)
 
-	// 全局中间件
-	router.Use(middleware.RequestID())             // 请求 ID 追踪
-	router.Use(middleware.SecurityHeaders())       // 安全响应头
-	router.Use(middleware.BodySizeLimit(10 << 20)) // 请求体大小限制 (10MB)
-	router.Use(middleware.CorssDomainHandler())    // 跨域处理
+	// 全局中间件（按推荐顺序：限流 → 安全 → 请求ID → 跨域）
+	// 1. 全局限流（如果启用）- 最先执行，防止恶意请求消耗资源
+	if config.EnableRateLimit {
+		router.Use(middleware.IPRateLimit(config.GlobalRateLimit, config.GlobalRateBurst))
+	}
 
-	// 健康检查端点（不需要认证）
+	// 2. 安全响应头 - 早期设置安全策略
+	router.Use(middleware.SecurityHeaders())
+
+	// 3. 请求 ID 追踪 - 用于日志关联
+	router.Use(middleware.RequestID())
+
+	// 4. 请求体大小限制 - 使用配置值
+	router.Use(middleware.BodySizeLimit(config.MaxBodySize))
+
+	// 5. 跨域处理 - 在业务逻辑前处理
+	router.Use(middleware.CorssDomainHandler())
+
+	// 健康检查端点（不需要认证，不受限流影响）
 	router.GET("/health", health.Health)
 	router.GET("/ready", health.Ready)
 

@@ -108,6 +108,18 @@ var (
 	cacheMu      sync.RWMutex
 )
 
+// CleanupAllLimiters 清理所有限流器资源（应用关闭时调用）
+func CleanupAllLimiters() {
+	cacheMu.Lock()
+	defer cacheMu.Unlock()
+
+	for _, limiter := range limiterCache {
+		limiter.Stop()
+	}
+	// 清空缓存
+	limiterCache = make(map[string]*RateLimiter)
+}
+
 // getLimiterFromCache 从缓存中获取或创建限流器
 func getLimiterFromCache(r, b int) *RateLimiter {
 	key := fmt.Sprintf("%d-%d", r, b)

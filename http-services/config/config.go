@@ -36,6 +36,17 @@ var (
 	// JWT
 	JWTKey        string
 	JWTExpiration time.Duration
+
+	// Server
+	MaxBodySize     int64         // 请求体大小限制（字节）
+	ShutdownTimeout time.Duration // 优雅关闭超时时间
+	ReadTimeout     time.Duration // 读取超时
+	WriteTimeout    time.Duration // 写入超时
+	IdleTimeout     time.Duration // 空闲超时
+	MaxHeaderBytes  int           // 最大请求头大小
+	EnableRateLimit bool          // 是否启用全局限流
+	GlobalRateLimit int           // 全局限流速率（每秒请求数）
+	GlobalRateBurst int           // 全局限流突发容量
 )
 
 // 分页配置

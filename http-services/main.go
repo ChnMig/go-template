@@ -3,14 +3,15 @@ package main
 import (
 	"context"
 	"fmt"
-	"http-services/api"
-	"http-services/config"
-	"http-services/utils/log"
 	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
+
+	"http-services/api"
+	"http-services/api/middleware"
+	"http-services/config"
+	"http-services/utils/log"
 
 	"github.com/alecthomas/kong"
 	"go.uber.org/zap"
@@ -46,7 +47,7 @@ func main() {
 	// 从配置文件加载配置
 	if err := config.LoadConfig(); err != nil {
 		fmt.Printf("Failed to load configuration: %v\n", err)
-		os.Exit(1)
+		ctx.Exit(1)
 	}
 
 	// 设置运行模式（必须在初始化日志之前）
@@ -84,10 +85,14 @@ func main() {
 	// 初始化 API 路由
 	r := api.InitApi()
 
-	// 创建 HTTP 服务器
+	// 创建 HTTP 服务器（使用配置化的超时参数）
 	srv := &http.Server{
-		Addr:    fmt.Sprintf(":%d", config.ListenPort),
-		Handler: r,
+		Addr:           fmt.Sprintf(":%d", config.ListenPort),
+		Handler:        r,
+		ReadTimeout:    config.ReadTimeout,
+		WriteTimeout:   config.WriteTimeout,
+		IdleTimeout:    config.IdleTimeout,
+		MaxHeaderBytes: config.MaxHeaderBytes,
 	}
 
 	// 在 goroutine 中启动服务器
@@ -104,15 +109,20 @@ func main() {
 	sig := <-quit
 	zap.L().Info("Received stop signal, shutting down gracefully", zap.String("signal", sig.String()))
 
-	// 创建带超时的 context 用于优雅关闭
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	// 创建带超时的 context 用于优雅关闭（使用配置化的超时时间）
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), config.ShutdownTimeout)
 	defer cancel()
 
 	// 优雅关闭服务器
 	if err := srv.Shutdown(shutdownCtx); err != nil {
 		zap.L().Error("Server forced to shutdown", zap.Error(err))
-		ctx.Exit(1)
+		// 即使服务器强制关闭，也要尝试清理资源
 	}
+
+	// 清理资源
+	zap.L().Info("Cleaning up resources...")
+	middleware.CleanupAllLimiters() // 清理限流器
+	log.StopMonitor()               // 停止日志监控并刷新缓冲区
 
 	zap.L().Info("Server exited gracefully")
 	ctx.Exit(0)

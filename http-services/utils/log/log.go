@@ -13,7 +13,10 @@ import (
 	"gopkg.in/natefinch/lumberjack.v2"
 )
 
-var logger *zap.Logger
+var (
+	logger      *zap.Logger
+	monitorDone chan struct{} // 用于停止监控 goroutine
+)
 
 // Creating Dev logger
 // DEV mode outputs logs to the terminal and is more readable
@@ -84,6 +87,9 @@ func monitorFile() {
 			}
 		case err := <-watcher.Errors:
 			zap.L().Error("file listening error", zap.Error(err))
+		case <-monitorDone:
+			// 收到停止信号，退出监控
+			return
 		}
 	}
 }
@@ -106,6 +112,20 @@ func init() {
 func StartMonitor() {
 	// 只在生产模式下启动文件监控
 	if runmodel.IsRelease() {
+		monitorDone = make(chan struct{})
 		go monitorFile()
+	}
+}
+
+// StopMonitor 停止日志文件监控并刷新日志缓冲区（应用关闭时调用）
+func StopMonitor() {
+	// 停止文件监控 goroutine
+	if monitorDone != nil {
+		close(monitorDone)
+	}
+
+	// 刷新日志缓冲区
+	if logger != nil {
+		_ = logger.Sync()
 	}
 }
