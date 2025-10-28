@@ -16,4 +16,3 @@
 - 所有 API 响应自动包含 `trace_id` 字段，方便问题追踪
 - 使用 `log.FromContext(c)` 获取带上下文的 logger，自动包含 trace_id、method、path 等信息
 - 错误处理使用 `response.ReturnError()` 返回统一格式，日志使用 `log.FromContext(c)` 记录详细信息
-- 项目已配置 GitHub Actions CI/CD，自动运行测试、代码检查和安全扫描
