@@ -37,7 +37,7 @@ func PrepareRegisteredClaims(rc *jwt.RegisteredClaims) {
 		rc.Audience = jwt.ClaimStrings{defaultAudience}
 	}
 	if rc.ID == "" {
-		rc.ID = id.IssueMd5ID()
+		rc.ID = id.GenerateID()
 	}
 	if rc.IssuedAt == nil {
 		rc.IssuedAt = jwt.NewNumericDate(now)

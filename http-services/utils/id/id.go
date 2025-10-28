@@ -23,7 +23,8 @@ func IssueID() string {
 	return fmt.Sprintf("%v", id)
 }
 
-func IssueMd5ID() string {
+// GenerateID 生成唯一 ID (基于 Sonyflake + MD5)
+func GenerateID() string {
 	keyID := IssueID()
 	id := fmt.Sprintf("%x", md5.Sum([]byte(keyID)))
 	return id

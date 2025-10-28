@@ -24,6 +24,8 @@ type RateLimiter struct {
 	rate     int           // 每秒请求数
 	burst    int           // 突发请求数
 	ttl      time.Duration // 限流器过期时间
+	ticker   *time.Ticker  // 清理定时器
+	stopChan chan struct{} // 停止信号
 }
 
 // NewRateLimiter 创建新的限流管理器
@@ -33,6 +35,7 @@ func NewRateLimiter(r, b int) *RateLimiter {
 		rate:     r,
 		burst:    b,
 		ttl:      10 * time.Minute, // 10分钟未访问则清理
+		stopChan: make(chan struct{}),
 	}
 	// 启动自动清理
 	rl.startCleanup(5 * time.Minute)
@@ -80,12 +83,23 @@ func (rl *RateLimiter) cleanup() {
 
 // startCleanup 启动定期清理任务
 func (rl *RateLimiter) startCleanup(interval time.Duration) {
-	ticker := time.NewTicker(interval)
+	rl.ticker = time.NewTicker(interval)
 	go func() {
-		for range ticker.C {
-			rl.cleanup()
+		for {
+			select {
+			case <-rl.ticker.C:
+				rl.cleanup()
+			case <-rl.stopChan:
+				rl.ticker.Stop()
+				return
+			}
 		}
 	}()
+}
+
+// Stop 停止限流器的清理任务
+func (rl *RateLimiter) Stop() {
+	close(rl.stopChan)
 }
 
 // limiters 全局限流器缓存，key 为 "rate-burst" 组合

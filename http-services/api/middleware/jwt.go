@@ -7,9 +7,8 @@ import (
 	"http-services/utils/authentication"
 )
 
-// TokenVerify Get the token and verify its validity
+// TokenVerify 获取 token 并验证其有效性
 func TokenVerify(c *gin.Context) {
-	c.FormFile("file") // Prevents an error from being returned before the file is sent, resulting in a front-end 504 instead of a correct response
 	token := c.Request.Header.Get("token")
 	if token == "" {
 		response.ReturnError(c, response.UNAUTHENTICATED, "without token.")
@@ -20,8 +19,7 @@ func TokenVerify(c *gin.Context) {
 		response.ReturnError(c, response.UNAUTHENTICATED, "token verify failed.")
 		return
 	}
-	// set data to gin.Context
+	// 将 JWT 数据设置到 gin.Context 中
 	c.Set("jwtData", tokenID)
-	// Next
 	c.Next()
 }

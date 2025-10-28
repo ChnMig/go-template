@@ -31,7 +31,7 @@ Suitable for use as a http-api service template.
    ```
 
 2. Edit `config.yaml` and update the values, especially:
-   - `jwt.key`: Change this to a secure random string
+   - `jwt.key`: **必须修改为至少32字符的强密钥** (服务启动时会进行安全检查)
    - `jwt.expiration`: Set token expiration time (e.g., "12h", "24h", "30m")
 
 3. Build and run:
@@ -84,16 +84,22 @@ jwt:
 
 ### Core Components
 
-- **JWT Authentication**: Standard JWT authentication
+- **JWT Authentication**: Standard JWT authentication with security validation
 - **CORS**: Cross-Origin Resource Sharing middleware
 - **Password Encryption**: BCrypt-based secure password hashing
 - **Pagination**: Built-in pagination support with configurable defaults
+- **Graceful Shutdown**: Proper HTTP server graceful shutdown with 10s timeout
+- **Health Checks**: `/health` and `/ready` endpoints for monitoring
 
 ### Middleware
 
+- `RequestID`: Request ID tracking for distributed tracing
+- `SecurityHeaders`: Security response headers (X-Content-Type-Options, X-Frame-Options, etc.)
+- `BodySizeLimit`: Request body size limit (default 10MB)
 - `TokenVerify`: JWT authentication middleware
 - `CorssDomainHandler`: CORS middleware
-- `CheckParam`: Request parameter validation
+- `IPRateLimit`: IP-based rate limiting with token bucket algorithm
+- `TokenRateLimit`: Token-based rate limiting for authenticated users
 
 ### Utilities
 
@@ -107,6 +113,7 @@ jwt:
   - Password verification
 
 - **ID Generation** (`util/id`):
+  - Sonyflake-based distributed unique ID generation
   - MD5-based unique ID generation
 
 ### Dependencies
@@ -126,17 +133,50 @@ Key dependencies include:
 http-services/
 ├── api/
 │   ├── app/              # API handlers
+│   │   ├── example/      # Example API endpoints
+│   │   └── health/       # Health check endpoints
 │   ├── middleware/       # Middleware components
 │   └── response/         # Response formatters
 ├── config/               # Configuration management
-├── util/                 # Utility packages
-│   ├── authentication/   # JWT utilities
-│   ├── encryption/       # Password encryption
-│   ├── id/              # ID generation
+├── utils/                # Utility packages
+│   ├── authentication/   # JWT utilities (with tests)
+│   ├── encryption/       # Password encryption (with tests)
+│   ├── id/              # ID generation (with tests)
 │   ├── log/             # Logging
-│   └── path-tool/       # Path utilities
+│   ├── path-tool/       # Path utilities
+│   └── run-model/       # Runtime mode utilities
+├── db/                   # Database layer (placeholder)
+├── services/             # Business logic layer (placeholder)
+├── common/               # Common utilities (placeholder)
 └── main.go              # Application entry point
 ```
+
+## Testing
+
+Run all tests:
+
+```bash
+make test
+```
+
+Run tests with coverage:
+
+```bash
+go test -cover ./...
+```
+
+Current test coverage includes:
+- JWT authentication and token handling
+- BCrypt password hashing and verification
+- ID generation (Sonyflake + MD5)
+
+## Security Features
+
+- **JWT Key Validation**: Server refuses to start with weak or default JWT keys
+- **Request Body Size Limit**: Prevents DoS attacks from large payloads
+- **Security Headers**: Automatic security headers for all responses
+- **Rate Limiting**: Configurable rate limiting per IP or authenticated user
+- **Request ID Tracking**: Distributed tracing support
 
 ## Development Notes
 

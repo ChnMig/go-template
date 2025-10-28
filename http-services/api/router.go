@@ -2,6 +2,7 @@ package api
 
 import (
 	"http-services/api/app/example"
+	"http-services/api/app/health"
 	"http-services/api/middleware"
 
 	"github.com/gin-gonic/gin"
@@ -26,15 +27,24 @@ func privateRouter(router *gin.RouterGroup) {
 	}
 }
 
-// InitApi init gshop app
+// InitApi 初始化 API 路由
 func InitApi() *gin.Engine {
 	// gin.Default uses Use by default. Two global middlewares are added, Logger(), Recovery(), Logger is to print logs, Recovery is panic and returns 500
 	gin.SetMode(gin.ReleaseMode)
 	router := gin.Default()
 	// https://pkg.go.dev/github.com/gin-gonic/gin#readme-don-t-trust-all-proxies
 	router.SetTrustedProxies(nil)
-	// Add consent cross-domain middleware
-	router.Use(middleware.CorssDomainHandler())
+
+	// 全局中间件
+	router.Use(middleware.RequestID())              // 请求 ID 追踪
+	router.Use(middleware.SecurityHeaders())        // 安全响应头
+	router.Use(middleware.BodySizeLimit(10 << 20))  // 请求体大小限制 (10MB)
+	router.Use(middleware.CorssDomainHandler())     // 跨域处理
+
+	// 健康检查端点（不需要认证）
+	router.GET("/health", health.Health)
+	router.GET("/ready", health.Ready)
+
 	// static
 	router.Static("/static", "./static")
 	// api-v1

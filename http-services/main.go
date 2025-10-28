@@ -1,13 +1,16 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"http-services/api"
 	"http-services/config"
 	"http-services/utils/log"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/alecthomas/kong"
 	"go.uber.org/zap"
@@ -80,18 +83,37 @@ func main() {
 
 	// 初始化 API 路由
 	r := api.InitApi()
+
+	// 创建 HTTP 服务器
+	srv := &http.Server{
+		Addr:    fmt.Sprintf(":%d", config.ListenPort),
+		Handler: r,
+	}
+
+	// 在 goroutine 中启动服务器
 	go func() {
-		if err := r.Run(fmt.Sprintf(":%d", config.ListenPort)); err != nil {
+		zap.L().Info("Server is starting...")
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			zap.L().Fatal("Failed to start server", zap.Error(err))
 		}
 	}()
 
 	// 监听停止信号
-	sigs := make(chan os.Signal, 1)
-	signal.Notify(sigs, syscall.SIGTERM, syscall.SIGINT)
-	sig := <-sigs
-	zap.L().Info("Received stop signal, shutting down", zap.String("signal", sig.String()))
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGTERM, syscall.SIGINT)
+	sig := <-quit
+	zap.L().Info("Received stop signal, shutting down gracefully", zap.String("signal", sig.String()))
 
-	// 执行清理工作
+	// 创建带超时的 context 用于优雅关闭
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	// 优雅关闭服务器
+	if err := srv.Shutdown(shutdownCtx); err != nil {
+		zap.L().Error("Server forced to shutdown", zap.Error(err))
+		ctx.Exit(1)
+	}
+
+	zap.L().Info("Server exited gracefully")
 	ctx.Exit(0)
 }
