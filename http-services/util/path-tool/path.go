@@ -6,9 +6,13 @@ import (
 	"strings"
 )
 
-// Get the directory where the current program is located
+// Get the current working directory
 func GetCurrentDirectory() string {
-	dir, _ := filepath.Abs(filepath.Dir(os.Args[0]))
+	dir, err := os.Getwd()
+	if err != nil {
+		// 如果获取工作目录失败，回退到可执行文件所在目录
+		dir, _ = filepath.Abs(filepath.Dir(os.Args[0]))
+	}
 	return strings.Replace(dir, "\\", "/", -1)
 }
 

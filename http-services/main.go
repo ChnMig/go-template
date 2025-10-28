@@ -46,7 +46,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	// 设置运行模式
+	// 设置运行模式（必须在初始化日志之前）
 	if CLI.Dev {
 		config.RunModel = config.RunModelDevValue
 	} else {
@@ -62,8 +62,9 @@ func main() {
 		}
 	}
 
-	// 初始化日志
+	// 初始化日志（在设置好 RunModel 之后）
 	log.GetLogger()
+	log.StartMonitor() // 启动日志文件监控
 
 	// 校验配置
 	config.CheckConfig(

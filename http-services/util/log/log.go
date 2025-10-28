@@ -89,10 +89,19 @@ func monitorFile() {
 }
 
 func GetLogger() *zap.Logger {
+	// 如果 logger 还未初始化，先初始化
+	if logger == nil {
+		SetLogger()
+	}
 	return logger
 }
 
 func init() {
-	SetLogger()
+	// init 时不初始化 logger，等待 main 中设置好 RunModel 后再初始化
+	// SetLogger() 会在 GetLogger() 第一次调用时执行
+}
+
+// StartMonitor 启动日志文件监控（需在初始化后调用）
+func StartMonitor() {
 	go monitorFile()
 }
