@@ -56,6 +56,6 @@ lint: ## 运行代码检查（go vet）
 verify: ## 验证：fmt -> lint -> test
 	@$(MAKE) fmt
 	@$(MAKE) lint
-	@$(MAKE) test-cover
+	@$(MAKE) test
 
 .DEFAULT_GOAL := help
