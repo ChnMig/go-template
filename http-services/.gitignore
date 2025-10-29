@@ -21,3 +21,5 @@ log/
 # Sublime Text settings
 *.sublime-workspace
 *.sublime-project
+
+*.out
