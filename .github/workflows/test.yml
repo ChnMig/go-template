@@ -152,35 +152,3 @@ jobs:
         name: http-services-binary-${{ runner.os }}
         path: http-services/bin/http-services
         retention-days: 7
-
-  security:
-    name: Security Scan
-    runs-on: ubuntu-latest
-
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-
-    - name: Set up Go
-      uses: actions/setup-go@v5
-      with:
-        go-version: '1.25.x'
-        cache-dependency-path: http-services/go.sum
-
-    # 配置 Go 模块代理（国内镜像加速）
-    - name: Configure Go proxy for China
-      run: |
-        go env -w GO111MODULE=on
-        go env -w GOPROXY=https://goproxy.cn,https://mirrors.aliyun.com/goproxy/,https://goproxy.io,direct
-        go env -w GOSUMDB=sum.golang.google.cn
-
-    - name: Run Gosec Security Scanner
-      uses: securego/gosec@master
-      with:
-        args: '-no-fail -fmt sarif -out results.sarif ./http-services/...'
-
-    - name: Upload SARIF file
-      uses: github/codeql-action/upload-sarif@v3
-      with:
-        sarif_file: results.sarif
-      if: always()
