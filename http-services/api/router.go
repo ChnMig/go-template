@@ -1,8 +1,7 @@
 package api
 
 import (
-    "http-services/api/app/example"
-    "http-services/api/app/health"
+    healthopen "http-services/api/app/v1/open/health"
     "http-services/api/middleware"
     "http-services/config"
 
@@ -14,18 +13,13 @@ func openRouter(router *gin.RouterGroup) {
     // /api/v1/open
     open := router.Group("/open")
     // 各 app 负责在自身包内声明子路由（更清晰的分层）
-    // 将健康检查放入 open 分组：/api/v1/open/health
-    open.GET("/health", health.Status)
-    example.RegisterOpenRoutes(open)
+    // 将健康检查放入 open 分组（由 health 模块自行注册）
+    healthopen.RegisterOpenRoutes(open)
 }
 
 // private 层级路由：仅负责定义 private 分组，并交由各 app 注册自身子路由
 func privateRouter(router *gin.RouterGroup) {
-    // /api/v1/private
-    private := router.Group("/private")
-    // 注意：认证与私有限流由各 app 视需求自行叠加（保持最小改动）
-    // 若需统一强制校验，可在此处为 private 组统一 Use 中间件
-    example.RegisterPrivateRoutes(private)
+    // 预留：/api/v1/private 下当前无接口
 }
 
 // InitApi 初始化 API 路由

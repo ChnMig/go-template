@@ -45,3 +45,4 @@ func TestStatus(t *testing.T) {
         t.Errorf("Status() missing uptime field")
     }
 }
+

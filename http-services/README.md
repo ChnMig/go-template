@@ -20,14 +20,16 @@
 ```
 http-services/
 ├── api/                    # API 相关代码
-│   ├── app/               # 业务处理
-│   │   └── example/       # 示例业务模块
+│   ├── app/               # 业务处理（按版本与分组组织）
+│   │   └── v1/
+│   │       └── open/
+│   │           └── health/    # 健康检查模块（开放）
 │   ├── middleware/        # 中间件
 │   │   ├── cross-domain.go   # 跨域处理
 │   │   ├── jwt.go            # JWT 验证
 │   │   ├── page.go           # 分页处理
 │   │   ├── params.go         # 参数验证
-│   │   └── rate_limit.go     # 限流中间件
+│   │   └── rate-limit.go     # 限流中间件
 │   ├── response/          # 响应处理
 │   │   ├── code.go           # 状态码定义
 │   │   └── format.go         # 响应格式化
@@ -269,7 +271,7 @@ response.ReturnOkWithTotal(c, 100, list)
 
 ```go
 // 需要认证的路由组
-privateRouter := router.Group("/api/private", middleware.TokenVerify)
+privateRouter := router.Group("/api/v1/private", middleware.TokenVerify)
 {
     privateRouter.GET("/user", handler)
 }
@@ -279,10 +281,10 @@ privateRouter := router.Group("/api/private", middleware.TokenVerify)
 
 ```go
 // IP 限流（每秒10个请求，突发20个）
-router.Group("/api/public", middleware.IPRateLimit(10, 20))
+router.Group("/api/v1/open", middleware.IPRateLimit(10, 20))
 
 // Token 限流（基于用户，每秒100个请求，突发200个）
-router.Group("/api/user",
+router.Group("/api/v1/private",
     middleware.TokenVerify,
     middleware.TokenRateLimit(100, 200))
 
@@ -324,13 +326,12 @@ pageSize := middleware.GetPageSize(c)  // 默认 20
 // api/router.go（顶层仅分组与编排，具体路由在 app 中注册）
 func openRouter(router *gin.RouterGroup) {
     open := router.Group("/open")
-    open.GET("/health", health.Status)       // 健康检查 /api/v1/open/health
-    example.RegisterOpenRoutes(open)          // 由 app/example 注册自身开放接口
+    healthopen.RegisterOpenRoutes(open)       // 健康检查 /api/v1/open/health 由模块注册
 }
 
 func privateRouter(router *gin.RouterGroup) {
     private := router.Group("/private")
-    example.RegisterPrivateRoutes(private)    // 由 app/example 注册自身私有接口
+    // 预留：按需注册其他模块私有接口
 }
 ```
 
@@ -421,7 +422,7 @@ export HTTP_SERVICES_LOG_MAX_AGE=60
 import "go.uber.org/zap"
 
 // 记录日志
-zap.L().Info("用户登录", zap.String("user", "admin"))
+zap.L().Info("业务事件", zap.String("action", "process"))
 zap.L().Error("操作失败", zap.Error(err))
 zap.L().Debug("调试信息", zap.Any("data", data))
 ```
@@ -468,19 +469,14 @@ curl http://localhost:8080/api/v1/open/health
 
 ### 访问受保护接口
 
-```bash
-curl -X GET http://localhost:8080/api/v1/private/example/pong \
-  -H "token: YOUR_JWT_TOKEN"
-
-注：如需生成测试用 Token，可在业务层调用 `utils/authentication.JWTIssue(map[string]interface{}{...})`。
-```
+当前模板未内置示例私有接口。可按需新增 `api/app/v1/private/<module>` 并在顶层 `privateRouter` 中注册。
 
 ### 测试限流
 
 ```bash
 # 快速发送多个请求测试限流
 for i in {1..30}; do
-  curl http://localhost:8080/api/v1/open/example/pong &
+  curl http://localhost:8080/api/v1/open/health &
 done
 wait
 ```
