@@ -5,6 +5,7 @@
 `backend/middleware.md` - 中间件架构与使用文档，开发API时必读
 `backend/cli.md` - 命令行参数文档，启动和部署时必读
 `backend/logging.md` - 日志系统架构与使用规范，记录日志时必读
+`backend/api.md` - 后端 API 路由分层架构与使用规范，开发/调整路由时必读
 
 ## 全局重要记忆
 - 项目使用 YAML 配置文件管理配置项，配置文件位于 `http-services/config.yaml`

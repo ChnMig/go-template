@@ -13,7 +13,7 @@
 - ✅ **响应规范化** - 统一的 API 响应格式，符合 Google API 设计指南
 - ✅ **跨域支持** - 内置 CORS 中间件
 - ✅ **优雅关闭** - 支持信号监听和优雅退出，自动清理资源
-- ✅ **健康检查** - 内置健康检查和就绪检查端点
+- ✅ **健康检查** - 单一健康检查端点
 
 ## 目录结构
 
@@ -318,27 +318,19 @@ pageSize := middleware.GetPageSize(c)  // 默认 20
 // 请求参数：page=-1 或 pageSize=-1
 ```
 
-### 4. 路由组织
+### 4. 路由组织（分层）
 
 ```go
-// api/router.go
+// api/router.go（顶层仅分组与编排，具体路由在 app 中注册）
 func openRouter(router *gin.RouterGroup) {
-    // 开放接口：无需认证，严格限流
-    exampleRouter := router.Group("/open/example", middleware.IPRateLimit(10, 20))
-    {
-        exampleRouter.GET("/pong", example.Pong)
-        exampleRouter.POST("/token", example.CreateToken)
-    }
+    open := router.Group("/open")
+    open.GET("/health", health.Status)       // 健康检查 /api/v1/open/health
+    example.RegisterOpenRoutes(open)          // 由 app/example 注册自身开放接口
 }
 
 func privateRouter(router *gin.RouterGroup) {
-    // 私有接口：需要认证，宽松限流
-    exampleRouter := router.Group("/private/example",
-        middleware.TokenVerify,
-        middleware.TokenRateLimit(100, 200))
-    {
-        exampleRouter.GET("/pong", example.Pong)
-    }
+    private := router.Group("/private")
+    example.RegisterPrivateRoutes(private)    // 由 app/example 注册自身私有接口
 }
 ```
 
@@ -468,25 +460,10 @@ make tidy      # 整理依赖
 ### 健康检查
 
 ```bash
-# 健康检查（用于 k8s liveness probe）
-curl http://localhost:8080/health
+# 健康检查（包含 ready 与 uptime 信息）
+curl http://localhost:8080/api/v1/open/health
 
-# 响应：{"status":"ok"}
-```
-
-```bash
-# 就绪检查（用于 k8s readiness probe）
-curl http://localhost:8080/ready
-
-# 响应：{"status":"ready","uptime":"1h30m20s"}
-```
-
-### 获取 Token
-
-```bash
-curl -X POST http://localhost:8080/api/v1/open/example/token \
-  -H "Content-Type: application/json" \
-  -d '{"user":"admin","password":"pwd"}'
+# 响应：{"status":"ok","ready":true,"uptime":"1h30m20s"}
 ```
 
 ### 访问受保护接口
@@ -494,6 +471,8 @@ curl -X POST http://localhost:8080/api/v1/open/example/token \
 ```bash
 curl -X GET http://localhost:8080/api/v1/private/example/pong \
   -H "token: YOUR_JWT_TOKEN"
+
+注：如需生成测试用 Token，可在业务层调用 `utils/authentication.JWTIssue(map[string]interface{}{...})`。
 ```
 
 ### 测试限流
@@ -601,10 +580,10 @@ spec:
           value: "24h"
         - name: HTTP_SERVICES_SERVER_ENABLE_RATE_LIMIT
           value: "true"
-        # 健康检查配置
+        # 健康检查配置（合并为单一端点 /api/v1/open/health）
         livenessProbe:
           httpGet:
-            path: /health
+            path: /api/v1/open/health
             port: 8080
           initialDelaySeconds: 10
           periodSeconds: 10
@@ -612,7 +591,7 @@ spec:
           failureThreshold: 3
         readinessProbe:
           httpGet:
-            path: /ready
+            path: /api/v1/open/health
             port: 8080
           initialDelaySeconds: 5
           periodSeconds: 5

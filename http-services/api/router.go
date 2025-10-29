@@ -1,32 +1,31 @@
 package api
 
 import (
-	"http-services/api/app/example"
-	"http-services/api/app/health"
-	"http-services/api/middleware"
-	"http-services/config"
+    "http-services/api/app/example"
+    "http-services/api/app/health"
+    "http-services/api/middleware"
+    "http-services/config"
 
-	"github.com/gin-gonic/gin"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
+    "github.com/gin-gonic/gin"
 )
 
-// open
+// open 层级路由：仅负责定义 open 分组，并交由各 app 注册自身子路由
 func openRouter(router *gin.RouterGroup) {
-	// 示例：为开放接口添加 IP 限流（每秒10个请求，突发20个）
-	exampleRouter := router.Group("/open/example", middleware.IPRateLimit(10, 20))
-	{
-		exampleRouter.GET("/pong", example.Pong)
-		exampleRouter.POST("/token", example.CreateToken)
-	}
+    // /api/v1/open
+    open := router.Group("/open")
+    // 各 app 负责在自身包内声明子路由（更清晰的分层）
+    // 将健康检查放入 open 分组：/api/v1/open/health
+    open.GET("/health", health.Status)
+    example.RegisterOpenRoutes(open)
 }
 
-// private
+// private 层级路由：仅负责定义 private 分组，并交由各 app 注册自身子路由
 func privateRouter(router *gin.RouterGroup) {
-	// 示例：为私有接口添加 Token 限流（每秒100个请求，突发200个）
-	exampleRouter := router.Group("/private/example", middleware.TokenVerify, middleware.TokenRateLimit(100, 200))
-	{
-		exampleRouter.GET("/pong", example.Pong)
-	}
+    // /api/v1/private
+    private := router.Group("/private")
+    // 注意：认证与私有限流由各 app 视需求自行叠加（保持最小改动）
+    // 若需统一强制校验，可在此处为 private 组统一 Use 中间件
+    example.RegisterPrivateRoutes(private)
 }
 
 // InitApi 初始化 API 路由
@@ -49,8 +48,7 @@ func InitApi() *gin.Engine {
 	// 3. 请求 ID 追踪 - 用于日志关联
 	router.Use(middleware.RequestID())
 
-	// 4. Prometheus 监控 - 记录请求指标
-	router.Use(middleware.Metrics())
+    // 4. 取消 Prometheus 监控中间件（不需要 metrics）
 
 	// 5. 请求体大小限制 - 使用配置值
 	router.Use(middleware.BodySizeLimit(config.MaxBodySize))
@@ -58,21 +56,18 @@ func InitApi() *gin.Engine {
 	// 6. 跨域处理 - 在业务逻辑前处理
 	router.Use(middleware.CorssDomainHandler())
 
-	// 健康检查端点（不需要认证，不受限流影响）
-	router.GET("/health", health.Health)
-	router.GET("/ready", health.Ready)
+    // 健康检查端点已移动到 openRouter（/api/v1/open/health）
 
-	// Prometheus metrics 端点
-	router.GET("/metrics", gin.WrapH(promhttp.Handler()))
+    // 移除 Prometheus metrics 端点（不需要 metrics）
 
-	// static
-	router.Static("/static", "./static")
-	// api-v1
-	// Using version control for iteration
-	v1 := router.Group("/api/v1")
-	{
-		openRouter(v1)
-		privateRouter(v1)
-	}
-	return router
+    // static
+    router.Static("/static", "./static")
+    // api-v1
+    // Using version control for iteration
+    v1 := router.Group("/api/v1")
+    {
+        openRouter(v1)
+        privateRouter(v1)
+    }
+    return router
 }
