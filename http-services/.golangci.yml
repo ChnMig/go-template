@@ -56,7 +56,6 @@ linters:
     - govet         # 报告可疑的代码
     - ineffassign   # 检测无效的赋值
     - staticcheck   # 静态分析检查
-    - typecheck     # 类型检查
     - unused        # 检查未使用的代码
 
     # 代码风格
