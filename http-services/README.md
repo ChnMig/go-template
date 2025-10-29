@@ -267,30 +267,30 @@ response.ReturnOkWithTotal(c, 100, list)
 #### JWT 认证
 
 ```go
-// 需要认证的路由组
-privateRouter := router.Group("/api/v1/private", middleware.TokenVerify)
-{
-    privateRouter.GET("/user", handler)
+// 建议在 v1 层为 private 分组统一附加认证（示意，不包含具体接口）
+func RegisterRoutes(v1 *gin.RouterGroup) {
+    // 私有分组聚合：按需开启 JWT 校验
+    // privateGroup := v1.Group("/private", middleware.TokenVerify)
+    // private.RegisterRoutes(privateGroup)
 }
 ```
 
 #### 限流配置
 
 ```go
-// IP 限流（每秒10个请求，突发20个）
-router.Group("/api/v1/open", middleware.IPRateLimit(10, 20))
+// 在 v1 层或 open 聚合层就近添加限流
+func RegisterRoutes(v1 *gin.RouterGroup) {
+    // IP 限流（每秒10个请求，突发20个）
+    openGroup := v1.Group("/open", middleware.IPRateLimit(10, 20))
+    open.RegisterRoutes(openGroup)
+}
 
-// Token 限流（基于用户，每秒100个请求，突发200个）
-router.Group("/api/v1/private",
-    middleware.TokenVerify,
-    middleware.TokenRateLimit(100, 200))
+// 预定义限流级别（示例：在 open 组下的具体接口上使用）
+openGroup.POST("/sensitive", middleware.StrictRateLimit(), handler)   // 严格（5/秒）
+openGroup.GET("/normal", middleware.ModerateRateLimit(), handler)     // 中等（50/秒）
+openGroup.GET("/read", middleware.RelaxedRateLimit(), handler)        // 宽松（100/秒）
 
-// 预定义限流级别
-router.POST("/api/sensitive", middleware.StrictRateLimit(), handler)    // 严格（5/秒）
-router.GET("/api/normal", middleware.ModerateRateLimit(), handler)       // 中等（50/秒）
-router.GET("/api/read", middleware.RelaxedRateLimit(), handler)          // 宽松（100/秒）
-
-// 自定义限流 Key
+// 自定义限流 Key（示例：在 open 组的接口上）
 middleware.RateLimitWithOptions(middleware.RateLimitOptions{
     Rate: 50,
     Burst: 100,
@@ -320,15 +320,33 @@ pageSize := middleware.GetPageSize(c)  // 默认 20
 ### 4. 路由组织（分层）
 
 ```go
-// api/router.go（顶层仅分组与编排，具体路由在 app 中注册）
-func openRouter(router *gin.RouterGroup) {
-    open := router.Group("/open")
-    healthopen.RegisterOpenRoutes(open)       // 健康检查 /api/v1/open/health 由模块注册
+// 顶层：api/router.go（仅初始化与挂载 /api，业务路由下沉到 app 层）
+func InitApi() *gin.Engine {
+    router := gin.Default()
+    // ... 全局中间件
+    apiGroup := router.Group("/api")
+    app.RegisterRoutes(apiGroup)
+    return router
 }
 
-func privateRouter(router *gin.RouterGroup) {
-    private := router.Group("/private")
-    // 预留：按需注册其他模块私有接口
+// app 层：api/app/router.go（在 /api 下挂载各版本）
+func RegisterRoutes(api *gin.RouterGroup) {
+    v1Group := api.Group("/v1")
+    v1.RegisterRoutes(v1Group)
+}
+
+// v1 层：api/app/v1/router.go（在 /api/v1 下挂载 open / private 等分组）
+func RegisterRoutes(v1 *gin.RouterGroup) {
+    openGroup := v1.Group("/open")
+    open.RegisterRoutes(openGroup)
+
+    privateGroup := v1.Group("/private")
+    private.RegisterRoutes(privateGroup)
+}
+
+// open 聚合层：api/app/v1/open/router.go（在 /api/v1/open 下注册各模块公开路由）
+func RegisterRoutes(open *gin.RouterGroup) {
+    health.RegisterOpenRoutes(open) // /api/v1/open/health
 }
 ```
 
@@ -472,7 +490,7 @@ curl http://localhost:8080/api/v1/open/health
 
 ### 访问受保护接口
 
-当前模板未内置示例私有接口。可按需新增 `api/app/v1/private/<module>` 并在顶层 `privateRouter` 中注册。
+当前模板未内置示例私有接口。可按需新增 `api/app/v1/private/<module>`，并在 `api/app/v1/private/router.go` 中注册。
 
 ### 测试限流
 
