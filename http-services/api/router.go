@@ -1,28 +1,16 @@
 package api
 
 import (
-	healthopen "http-services/api/app/v1/open/health"
+	"http-services/api/app"
 	"http-services/api/middleware"
 	"http-services/config"
 
 	"github.com/gin-gonic/gin"
 )
 
-// open 层级路由：仅负责定义 open 分组，并交由各 app 注册自身子路由
-func openRouter(router *gin.RouterGroup) {
-	// /api/v1/open
-	open := router.Group("/open")
-	// 各 app 负责在自身包内声明子路由（更清晰的分层）
-	// 将健康检查放入 open 分组（由 health 模块自行注册）
-	healthopen.RegisterOpenRoutes(open)
-}
-
-// private 层级路由：仅负责定义 private 分组，并交由各 app 注册自身子路由
-func privateRouter(router *gin.RouterGroup) {
-	// 预留：/api/v1/private 下当前无接口
-}
-
 // InitApi 初始化 API 路由
+// 顶层仅负责：gin 初始化、全局中间件、挂载 /api 分组
+// 具体业务路由由 app 层逐级（app -> v1 -> open/private -> module）注册
 func InitApi() *gin.Engine {
 	// gin.Default uses Use by default. Two global middlewares are added, Logger(), Recovery(), Logger is to print logs, Recovery is panic and returns 500
 	gin.SetMode(gin.ReleaseMode)
@@ -56,12 +44,9 @@ func InitApi() *gin.Engine {
 
 	// static
 	router.Static("/static", "./static")
-	// api-v1
-	// Using version control for iteration
-	v1 := router.Group("/api/v1")
-	{
-		openRouter(v1)
-		privateRouter(v1)
-	}
+
+	// /api 分组，业务路由由 app 层递归注册
+	apiGroup := router.Group("/api")
+	app.RegisterRoutes(apiGroup)
 	return router
 }

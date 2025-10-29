@@ -17,3 +17,4 @@
 - 所有 API 响应自动包含 `trace_id` 字段，方便问题追踪
 - 使用 `log.FromContext(c)` 获取带上下文的 logger，自动包含 trace_id、method、path 等信息
 - 错误处理使用 `response.ReturnError()` 返回统一格式，日志使用 `log.FromContext(c)` 记录详细信息
+- 路由规范：`api/app` 下每一层级目录必须包含 `router.go`，通过 `RegisterRoutes(*gin.RouterGroup)` 逐级嵌套注册（app → v1 → open/private → module），顶层仅挂载 `/api`
