@@ -76,9 +76,6 @@ make help
 
 # 构建项目
 make build
-
-# 整理依赖
-make tidy
 ```
 
 ### 3. 运行服务
@@ -453,7 +450,6 @@ make dev       # 构建并运行（开发模式）
 make clean     # 清理构建文件
 make version   # 显示版本信息
 make test      # 运行测试
-make tidy      # 整理依赖
 ```
 
 ## API 示例

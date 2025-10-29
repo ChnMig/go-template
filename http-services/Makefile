@@ -1,4 +1,4 @@
-.PHONY: build run dev clean help test test-cover fmt lint tidy init
+.PHONY: build run dev clean help test test-cover fmt lint
 
 # 版本信息
 VERSION := $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
@@ -56,17 +56,5 @@ lint: ## 运行代码检查（go vet）
 	@echo "✓ 检查完成"
 
 
-
-tidy: ## 整理依赖
-	@go mod tidy
-	@go mod vendor
-
-# 初始化：整理依赖并 vendor
-init: ## 初始化开发环境（整理并 vendor 依赖）
-	@echo "初始化开发环境..."
-	@$(MAKE) tidy
-	@echo "✓ 初始化完成"
-
- 
 
 .DEFAULT_GOAL := help
