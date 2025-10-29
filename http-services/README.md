@@ -452,6 +452,13 @@ make version   # 显示版本信息
 make test      # 运行测试
 ```
 
+### 测试说明
+
+- 运行 `make test`：
+  - 输出中文汇总（包数量、通过/失败、用例通过/失败/跳过）
+  - 生成覆盖率文件 `coverage.out` 并打印总覆盖率
+- 如需仅查看覆盖率，也可直接使用 `go tool cover -func=coverage.out`
+
 ## API 示例
 
 ### 健康检查

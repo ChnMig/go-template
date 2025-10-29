@@ -39,8 +39,31 @@ version: ## 显示版本信息
 	@echo "Build Time: $(BUILD_TIME)"
 	@echo "Git Commit: $(GIT_COMMIT)"
 
-test: ## 运行测试并显示覆盖率
-	@go test -cover ./...
+test: ## 运行测试并显示覆盖率（含中文提示与结果解析）
+	@echo "运行测试（带覆盖率）..."
+	@set -o pipefail; \
+	OUT=$$(mktemp -t go-test-XXXXXX); \
+	trap 'rm -f "$$OUT"' EXIT; \
+	if go test -v -coverprofile=coverage.out -covermode=atomic ./... | tee "$$OUT"; then \
+	  STATUS=0; \
+	else \
+	  STATUS=$$?; \
+	fi; \
+	PASS_PKGS=$$(grep -c '^ok[[:space:]]' "$$OUT" || true); \
+	FAIL_PKGS=$$(grep -c '^FAIL[[:space:]]' "$$OUT" || true); \
+	TOTAL_PKGS=$$((PASS_PKGS+FAIL_PKGS)); \
+	PASS_TESTS=$$(grep -c '^--- PASS:' "$$OUT" || true); \
+	FAIL_TESTS=$$(grep -c '^--- FAIL:' "$$OUT" || true); \
+	SKIP_TESTS=$$(grep -c '^--- SKIP:' "$$OUT" || true); \
+	if [ -f coverage.out ]; then \
+	  TOTAL_COV=$$(go tool cover -func=coverage.out | awk '/^total:/ {print $$3}'); \
+	else \
+	  TOTAL_COV="N/A"; \
+	fi; \
+	echo "测试汇总：包 总数=$$TOTAL_PKGS 通过=$$PASS_PKGS 失败=$$FAIL_PKGS"; \
+	echo "用例汇总：通过=$$PASS_TESTS 失败=$$FAIL_TESTS 跳过=$$SKIP_TESTS"; \
+	echo "总覆盖率：$$TOTAL_COV"; \
+	exit $$STATUS
 
 fmt: ## 格式化代码
 	@echo "格式化代码..."
