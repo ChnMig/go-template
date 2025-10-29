@@ -1,4 +1,4 @@
-.PHONY: build run dev clean help test test-cover fmt lint
+.PHONY: build run dev clean help test fmt lint verify
 
 # 版本信息
 VERSION := $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
@@ -39,10 +39,7 @@ version: ## 显示版本信息
 	@echo "Build Time: $(BUILD_TIME)"
 	@echo "Git Commit: $(GIT_COMMIT)"
 
-test: ## 运行测试
-	@go test -v ./...
-
-test-cover: ## 运行测试并显示覆盖率
+test: ## 运行测试并显示覆盖率
 	@go test -cover ./...
 
 fmt: ## 格式化代码
@@ -55,6 +52,10 @@ lint: ## 运行代码检查（go vet）
 	@go vet ./...
 	@echo "✓ 检查完成"
 
-
+# 一键验证：先格式化，再静态检查，最后跑覆盖率测试
+verify: ## 验证：fmt -> lint -> test
+	@$(MAKE) fmt
+	@$(MAKE) lint
+	@$(MAKE) test-cover
 
 .DEFAULT_GOAL := help
