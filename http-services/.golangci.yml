@@ -1,5 +1,6 @@
-# golangci-lint 配置文件
+# golangci-lint 配置文件（v2 格式）
 # 文档: https://golangci-lint.run/usage/configuration/
+version: 2
 
 linters-settings:
   errcheck:
