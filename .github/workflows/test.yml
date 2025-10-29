@@ -153,6 +153,20 @@ jobs:
         path: http-services/bin/http-services
         retention-days: 7
 
+  security:
+    name: Security Scan
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.25.x'
+        cache-dependency-path: http-services/go.sum
+
     # 配置 Go 模块代理（国内镜像加速）
     - name: Configure Go proxy for China
       run: |
