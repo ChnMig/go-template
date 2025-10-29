@@ -7,7 +7,7 @@
 1. ✅ 结构化日志上下文
 2. ✅ Response 追踪增强
 3. ✅ 配置管理优化
-4. ✅ CI/CD 集成（国内网络优化）
+4. （可选）CI/CD 集成（如需）
 5. ✅ 测试覆盖率提升
 
 ---
@@ -111,18 +111,17 @@ export HTTP_SERVICES_LOG_MAX_SIZE=100
 
 ---
 
-## 4. CI/CD 集成
+## 4. CI/CD 集成（如需）
 
-### 新增文件
-- `.github/workflows/test.yml` - GitHub Actions 工作流
-- `.github/CI_README.md` - CI/CD 配置文档
-- `http-services/.golangci.yml` - golangci-lint 配置
+### 新增文件（可选）
+- 如需启用 CI，可添加 `.github/workflows/*.yml` GitHub Actions 工作流
+- 如需代码检查，可新增 `.golangci.yml` 并在本地或 CI 安装 golangci-lint
 
 ### 国内网络优化 🚀
 
 **核心优化：配置 Go 模块代理**
 
-所有 CI 作业都配置了国内镜像加速：
+建议为 CI 配置国内镜像加速：
 ```bash
 GOPROXY=https://goproxy.cn,https://mirrors.aliyun.com/goproxy/,https://goproxy.io,direct
 GOSUMDB=sum.golang.google.cn
@@ -134,7 +133,7 @@ GOSUMDB=sum.golang.google.cn
 3. **goproxy.io** - 全球 CDN，备用
 4. **direct** - 官方源（最后备选）
 
-### CI 流程
+### 参考 CI 流程
 
 #### 1. 测试作业 (Test Job)
 - 支持多 Go 版本测试 (1.23.x, 1.24.x, 1.25.x)
@@ -142,13 +141,13 @@ GOSUMDB=sum.golang.google.cn
 - 运行 `go vet` 静态分析
 - 运行单元测试和集成测试（带 race 检测）
 - 生成测试覆盖率报告
-- 上传到 Codecov（可选，需配置 CODECOV_TOKEN）
+- 上传到 Codecov（可选）
 - 覆盖率低于 50% 时发出警告
 
 #### 2. 代码检查 (Lint Job)
-- 使用 golangci-lint 进行代码质量检查
+- 可选：使用 golangci-lint 进行代码质量检查
 - 检查代码风格、潜在问题、代码重复等
-- 配置国内镜像加速
+- 可选：配置国内镜像加速
 
 #### 3. 构建作业 (Build Job)
 - 构建可执行文件

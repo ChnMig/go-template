@@ -1,4 +1,4 @@
-.PHONY: build run dev clean help
+.PHONY: build run dev clean help test test-cover fmt lint tidy init
 
 # 版本信息
 VERSION := $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
@@ -8,6 +8,8 @@ GIT_COMMIT := $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
 # 构建参数
 LDFLAGS := -X main.Version=$(VERSION) -X main.BuildTime=$(BUILD_TIME) -X main.GitCommit=$(GIT_COMMIT)
 BINARY_NAME := http-services
+
+# 工具与安装（本地不再安装 golangci-lint）
 
 help: ## 显示帮助信息
 	@echo "可用命令:"
@@ -48,13 +50,23 @@ fmt: ## 格式化代码
 	@gofmt -w $$(find . -name "*.go" -not -path "./vendor/*")
 	@echo "✓ 格式化完成"
 
-lint: ## 运行代码检查
+lint: ## 运行代码检查（go vet）
 	@echo "运行 go vet..."
 	@go vet ./...
 	@echo "✓ 检查完成"
 
+
+
 tidy: ## 整理依赖
 	@go mod tidy
 	@go mod vendor
+
+# 初始化：整理依赖并 vendor
+init: ## 初始化开发环境（整理并 vendor 依赖）
+	@echo "初始化开发环境..."
+	@$(MAKE) tidy
+	@echo "✓ 初始化完成"
+
+ 
 
 .DEFAULT_GOAL := help
