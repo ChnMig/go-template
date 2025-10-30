@@ -1,6 +1,7 @@
 # Build
 bulid/
 bin/
+dist/
 *.exe
 http-services
 

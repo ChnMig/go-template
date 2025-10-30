@@ -1,4 +1,4 @@
-.PHONY: build run dev clean help test fmt lint verify
+.PHONY: build build-local build-cross run dev clean clean-dist help test fmt lint verify
 
 # 版本信息
 VERSION := $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
@@ -9,22 +9,59 @@ GIT_COMMIT := $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
 LDFLAGS := -X main.Version=$(VERSION) -X main.BuildTime=$(BUILD_TIME) -X main.GitCommit=$(GIT_COMMIT)
 BINARY_NAME := http-services
 
-# 工具与安装（本地不再安装 golangci-lint）
+# 跨平台构建矩阵与产物目录
+PLATFORMS ?= linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64
+DIST_DIR := dist
+CGO_ENABLED ?= 0
+# 额外随包文件（存在才会被复制）
+PACKAGE_FILES ?= README.md config.yaml.example
 
 help: ## 显示帮助信息
 	@echo "可用命令:"
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-15s\033[0m %s\n", $$1, $$2}'
 
-build: ## 构建生产版本
+build: ## 构建生产版本（CROSS=1 启用跨平台打包）
+	@if [ "$(CROSS)" = "1" ]; then \
+	  $(MAKE) build-cross; \
+	else \
+	  $(MAKE) build-local; \
+	fi
+
+build-local: ## 本地构建（默认）
 	@echo "构建 $(BINARY_NAME)..."
+	@mkdir -p bin
 	@go build -ldflags "$(LDFLAGS)" -o bin/$(BINARY_NAME) .
 	@echo "✓ 构建完成: bin/$(BINARY_NAME)"
 
-run: build ## 构建并运行（生产模式）
+build-cross: clean-dist ## 跨平台构建并打包到 dist/
+	@echo "开始跨平台构建与打包: $(PLATFORMS)"
+	@mkdir -p $(DIST_DIR)
+	@set -e; \
+	for PLATFORM in $(PLATFORMS); do \
+	  OS=$${PLATFORM%/*}; ARCH=$${PLATFORM#*/}; \
+	  EXT=""; [ "$$OS" = "windows" ] && EXT=".exe"; \
+	  OUT_DIR="$(DIST_DIR)/$(BINARY_NAME)_$(VERSION)_$${OS}_$${ARCH}"; \
+	  echo "- 构建 $$OS/$$ARCH"; \
+	  mkdir -p "$$OUT_DIR"; \
+	  GOOS=$$OS GOARCH=$$ARCH CGO_ENABLED=$(CGO_ENABLED) \
+	    go build -trimpath -ldflags "$(LDFLAGS) -s -w" -o "$$OUT_DIR/$(BINARY_NAME)$$EXT" .; \
+	  for f in $(PACKAGE_FILES); do \
+	    [ -f "$$f" ] && cp "$$f" "$$OUT_DIR/" || true; \
+	  done; \
+	  if command -v zip >/dev/null 2>&1 && [ "$$OS" = "windows" ]; then \
+	    (cd "$(DIST_DIR)" && zip -q -r "$(BINARY_NAME)_$(VERSION)_$${OS}_$${ARCH}.zip" "$$(basename "$$OUT_DIR")"); \
+	  else \
+	    (cd "$(DIST_DIR)" && tar -czf "$(BINARY_NAME)_$(VERSION)_$${OS}_$${ARCH}.tar.gz" "$$(basename "$$OUT_DIR")"); \
+	  fi; \
+	  rm -rf "$$OUT_DIR"; \
+	done; \
+	echo "✓ 打包完成，产物位于 $(DIST_DIR)/"
+
+run: build-local ## 构建并运行（生产模式）
 	@echo "启动服务（生产模式）..."
 	@./bin/$(BINARY_NAME)
 
-dev: build ## 构建并运行（开发模式）
+dev: build-local ## 构建并运行（开发模式）
 	@echo "启动服务（开发模式）..."
 	@./bin/$(BINARY_NAME) --dev
 
@@ -33,6 +70,10 @@ clean: ## 清理构建文件
 	@rm -rf bin/
 	@rm -f $(BINARY_NAME)
 	@echo "✓ 清理完成"
+
+clean-dist: ## 清理打包产物（dist/）
+	@rm -rf $(DIST_DIR)
+	@echo "✓ 已清理 $(DIST_DIR)/"
 
 version: ## 显示版本信息
 	@echo "Version:    $(VERSION)"
@@ -75,7 +116,6 @@ lint: ## 运行代码检查（go vet）
 	@go vet ./...
 	@echo "✓ 检查完成"
 
-# 一键验证：先格式化，再静态检查，最后跑覆盖率测试
 verify: ## 验证：fmt -> lint -> test
 	@$(MAKE) fmt
 	@$(MAKE) lint

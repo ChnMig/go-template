@@ -78,6 +78,32 @@ make help
 make build
 ```
 
+### 2.1 跨平台打包
+
+Makefile 内置跨平台构建与打包，产物位于 `dist/`，文件名包含版本、系统与架构。
+
+基础用法：
+
+```bash
+# 一键跨平台构建与打包（Unix 平台 tar.gz，Windows 优先 zip）
+make build CROSS=1
+# 或显式使用
+make build-cross
+```
+
+自定义平台矩阵（默认：`linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64`）：
+
+```bash
+make build CROSS=1 \
+  PLATFORMS="linux/amd64 linux/arm64 darwin/arm64 windows/amd64"
+```
+
+说明：
+- 二进制内嵌版本信息：`Version`、`BuildTime`、`GitCommit`。
+- 默认 `CGO_ENABLED=0`；如依赖 CGO 可覆盖该变量。
+- 若存在将自动随包附带：`README.md`、`config.yaml.example`。
+- Windows 平台优先使用 `zip`，其他平台使用 `.tar.gz`。
+
 ### 3. 运行服务
 
 ```bash

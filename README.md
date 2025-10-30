@@ -50,6 +50,34 @@ Suitable for use as a http-api service template.
    make dev
    ```
 
+### Cross-Platform Packaging
+
+Use the Makefile to package binaries for multiple platforms. Artifacts are placed under `dist/` with version, OS and ARCH in the filename.
+
+Basic usage:
+
+```bash
+cd http-services
+
+# Cross-compile and package (tar.gz on Unix, zip on Windows)
+make build CROSS=1
+# or explicitly
+make build-cross
+```
+
+Customize target platforms via `PLATFORMS` (defaults: `linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64`):
+
+```bash
+make build CROSS=1 \
+  PLATFORMS="linux/amd64 linux/arm64 darwin/arm64 windows/amd64"
+```
+
+Notes:
+- Binaries embed version metadata: `Version`, `BuildTime`, `GitCommit`.
+- `CGO_ENABLED=0` by default; override if you depend on CGO.
+- Extra files included alongside binaries if present: `README.md`, `config.yaml.example`.
+- Windows packages are zipped when `zip` is available; others use `.tar.gz`.
+
 ### Command Line Options
 
 ```bash
