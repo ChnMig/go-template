@@ -13,7 +13,6 @@ config.yaml
 /vendor/
 
 # Log
-log/
 *.log
 
 # OSX dir files
