@@ -473,6 +473,10 @@ import "go.uber.org/zap"
 zap.L().Info("业务事件", zap.String("action", "process"))
 zap.L().Error("操作失败", zap.Error(err))
 zap.L().Debug("调试信息", zap.Any("data", data))
+
+// api 层获取日志实例
+log := log.FromContext(c)
+log.Info("处理请求", zap.String("path", c.Request.URL.Path))
 ```
 
 ## 命令行参数

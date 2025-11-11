@@ -49,12 +49,6 @@ func ReturnOkWithTotal(c *gin.Context, total int, result interface{}) {
 	c.Abort()
 }
 
-// ReturnOkWithCount 已废弃，请使用 ReturnOkWithTotal
-// Deprecated: Use ReturnOkWithTotal instead
-func ReturnOkWithCount(c *gin.Context, count int, result interface{}) {
-	ReturnOkWithTotal(c, count, result)
-}
-
 // ResponseError
 func ReturnError(c *gin.Context, data responseData, message string) {
 	data.Timestamp = time.Now().Unix()
