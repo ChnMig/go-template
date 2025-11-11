@@ -34,10 +34,13 @@ http-services/
 │   │   ├── code.go           # 状态码定义
 │   │   └── format.go         # 响应格式化
 │   └── router.go          # 路由配置
+├── common/               # 跨服务共享代码（常量、DTO、公共逻辑）
+├── services/             # 领域 Service 封装，承载核心业务流程
 ├── config/                # 配置管理
 │   ├── config.go          # 配置变量定义
 │   ├── load.go            # 配置加载
 │   └── check.go           # 配置校验
+├── db/                   # 数据库迁移、初始化脚本
 ├── utils/                 # 工具函数
 │   ├── authentication/    # JWT 认证工具
 │   ├── encryption/        # 加密工具（BCrypt）
@@ -48,6 +51,8 @@ http-services/
 ├── log/                   # 日志文件目录
 ├── static/               # 静态资源目录
 ├── bin/                  # 构建输出目录
+├── dist/                 # 跨平台打包产物（make build-cross）
+├── vendor/               # Go Modules 依赖镜像（vendor 模式）
 ├── config.yaml           # 配置文件（不提交到 Git）
 ├── config.yaml.example   # 配置文件示例
 ├── main.go               # 程序入口
@@ -55,6 +60,15 @@ http-services/
 └── README.md             # 项目文档
 
 ```
+
+### 架构约定（MVC）
+
+- **Controller（api/）**：负责路由注册、请求参数校验、上下文注入以及调用对应 Service，保持无业务逻辑。
+- **Service（services/）**：承载业务流程和领域规则，组合多个 Repository 或外部依赖，向 API 暴露清晰的用例方法。
+- **Model & Repository（db/）**：集中管理数据库模型定义、SQL/ORM 操作与数据源交互，禁止在 Service 之外直接访问数据库。
+- **Common（common/）**：放置控制器与服务都需要复用的 DTO、常量、公共错误等，与具体业务逻辑解耦。
+
+控制器只负责输入输出转换，所有业务变更优先在 Service 层实现，数据库变更在 db 层定义，确保职责清晰、便于测试。
 
 ## 快速开始
 
@@ -249,6 +263,7 @@ stringData:
   "status": "OK",
   "description": "No error",
   "message": "可选的具体错误信息",
+  "trace_id": "4b818aea2976c3d0a711e99c06ac3192",
   "timestamp": 1698765432,
   "detail": {},
   "total": 100
@@ -260,6 +275,7 @@ stringData:
 - `status`: 状态名称（如 OK, INVALID_ARGUMENT）
 - `description`: 标准错误描述（符合 Google API 规范）
 - `message`: 具体的业务错误信息（可选）
+- `trace_id`: 请求追踪 ID（由网关或中间件注入 `X-Request-ID`）
 - `timestamp`: 时间戳
 - `detail`: 详细数据（可选）
 - `total`: 分页总数（可选）
