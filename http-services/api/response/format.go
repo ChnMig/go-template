@@ -1,11 +1,13 @@
 package response
 
 import (
-	"http-services/utils/log"
 	"net/http"
 	"time"
 
+	"http-services/utils/log"
+
 	"github.com/gin-gonic/gin"
+	"go.uber.org/zap"
 )
 
 // getTraceID 从 context 中获取 trace_id
@@ -24,7 +26,7 @@ func ReturnErrorWithData(c *gin.Context, data responseData, result interface{}) 
 	data.TraceID = getTraceID(c)
 	data.Detail = result
 	c.JSON(http.StatusOK, data)
-	l.Info("Returning error response with data")
+	l.Info("Returning error response with data", zap.Any("data", data))
 	// Return directly
 	c.Abort()
 }
@@ -37,7 +39,7 @@ func ReturnOk(c *gin.Context, result interface{}) {
 	data.TraceID = getTraceID(c)
 	data.Detail = result
 	c.JSON(http.StatusOK, data)
-	l.Info("Returning OK response")
+	l.Info("Returning OK response", zap.Any("data", data))
 	// Return directly
 	c.Abort()
 }
@@ -51,7 +53,7 @@ func ReturnOkWithTotal(c *gin.Context, total int, result interface{}) {
 	data.Detail = result
 	data.Total = &total
 	c.JSON(http.StatusOK, data)
-	l.Info("Returning OK response with total")
+	l.Info("Returning OK response with total", zap.Any("data", data))
 	// Return directly
 	c.Abort()
 }
@@ -65,7 +67,7 @@ func ReturnError(c *gin.Context, data responseData, message string) {
 		data.Message = message
 	}
 	c.JSON(http.StatusOK, data)
-	l.Info("Returning error response")
+	l.Info("Returning error response", zap.Any("data", data))
 	// Return directly
 	c.Abort()
 }
@@ -77,7 +79,7 @@ func ReturnSuccess(c *gin.Context) {
 	data.Timestamp = time.Now().Unix()
 	data.TraceID = getTraceID(c)
 	c.JSON(http.StatusOK, data)
-	l.Info("Returning success response")
+	l.Info("Returning success response", zap.Any("data", data))
 	// Return directly
 	c.Abort()
 }
