@@ -7,9 +7,11 @@ import (
 	"http-services/utils/authentication"
 )
 
+const AuthorizationHeader = "Authorization"
+
 // TokenVerify 获取 token 并验证其有效性
 func TokenVerify(c *gin.Context) {
-	token := c.Request.Header.Get("token")
+	token := c.Request.Header.Get(AuthorizationHeader)
 	if token == "" {
 		response.ReturnError(c, response.UNAUTHENTICATED, "without token.")
 		return
