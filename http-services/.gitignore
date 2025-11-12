@@ -23,3 +23,6 @@ config.yaml
 *.sublime-project
 
 *.out
+
+.agentdocs/
+.claude/
