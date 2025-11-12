@@ -38,7 +38,7 @@ func TestTokenVerify_ValidToken(t *testing.T) {
 
 	// 发送带有效 token 的请求
 	req := httptest.NewRequest("GET", "/test", nil)
-	req.Header.Set("token", token)
+	req.Header.Set(AuthorizationHeader, token)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
@@ -84,7 +84,7 @@ func TestTokenVerify_InvalidToken(t *testing.T) {
 
 	// 发送带无效 token 的请求
 	req := httptest.NewRequest("GET", "/test", nil)
-	req.Header.Set("token", "invalid.token.here")
+	req.Header.Set(AuthorizationHeader, "invalid.token.here")
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
@@ -122,7 +122,7 @@ func TestTokenVerify_DifferentKey(t *testing.T) {
 
 	// 发送用旧密钥生成的 token
 	req := httptest.NewRequest("GET", "/test", nil)
-	req.Header.Set("token", token)
+	req.Header.Set(AuthorizationHeader, token)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
