@@ -57,7 +57,8 @@ func SetLogger() {
 	case runmodel.IsRelease():
 		logger = createProductLogger(config.LogPath)
 	default:
-		logger = createProductLogger(config.LogPath)
+		// 默认视作开发模式，避免测试/包初始化阶段创建文件与目录
+		logger = createDevLogger()
 	}
 	zap.ReplaceGlobals(logger)
 }

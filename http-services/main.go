@@ -12,6 +12,7 @@ import (
 	"http-services/api/middleware"
 	"http-services/config"
 	"http-services/utils/log"
+	pathtool "http-services/utils/path-tool"
 
 	"github.com/alecthomas/kong"
 	"go.uber.org/zap"
@@ -67,6 +68,10 @@ func main() {
 	}
 
 	// 初始化日志（在设置好 RunModel 之后）
+	// 仅在 release 模式创建日志目录，避免在测试/子包初始化时散落空 log 目录
+	if config.RunModel == config.RunModelRelease {
+		_ = pathtool.CreateDir(config.LogDir)
+	}
 	log.GetLogger()
 	log.StartMonitor() // 启动日志文件监控
 
