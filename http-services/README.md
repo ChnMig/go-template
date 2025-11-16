@@ -14,6 +14,7 @@
 - ✅ **跨域支持** - 内置 CORS 中间件
 - ✅ **优雅关闭** - 支持信号监听和优雅退出，自动清理资源
 - ✅ **健康检查** - 单一健康检查端点
+- ✅ **DTO 实体隔离** - 所有接口返回实体通过 DTO 与内部模型解耦，防止直接暴露数据库结构
 
 ## 目录结构
 
@@ -34,7 +35,7 @@ http-services/
 │   │   ├── code.go           # 状态码定义
 │   │   └── format.go         # 响应格式化
 │   └── router.go          # 路由配置
-├── common/               # 跨服务共享代码（常量、DTO、公共逻辑）
+├── common/               # 跨服务共享代码（常量、跨模块 DTO、公共逻辑）
 ├── services/             # 领域 Service 封装，承载核心业务流程
 ├── config/                # 配置管理
 │   ├── config.go          # 配置变量定义
@@ -60,6 +61,39 @@ http-services/
 └── README.md             # 项目文档
 
 ```
+
+## DTO 返回规范
+
+为了避免直接向外暴露数据库 Model 或内部 Service 结构体，所有对外 API 的业务实体返回都应通过 DTO（Data Transfer Object，数据传输对象）进行一层映射：
+
+- Handler 只负责将领域对象/模型转换为 DTO，再通过 `response.ReturnOk` / `response.ReturnOkWithTotal` 返回。
+- DTO 可以放在具体模块目录下（例如：`api/app/v1/open/health/dto.go`），也可以放在 `common` 目录中供多个模块复用。
+- DTO 中仅保留对外需要的字段，可对内部字段进行重命名、组合或过滤。
+
+以健康检查接口为例：
+
+```go
+// api/app/v1/open/health/dto.go
+type StatusDTO struct {
+	Status    string `json:"status"`
+	Ready     bool   `json:"ready"`
+	Uptime    string `json:"uptime"`
+	Timestamp int64  `json:"timestamp"`
+}
+
+// api/app/v1/open/health/health.go
+func Status(c *gin.Context) {
+	dto := StatusDTO{
+		Status:    "ok",
+		Ready:     true,
+		Uptime:    time.Since(startTime).String(),
+		Timestamp: time.Now().Unix(),
+	}
+	response.ReturnOk(c, dto)
+}
+```
+
+在实际业务开发中，禁止直接返回数据库实体（如 `db.User`）、ORM Model 或 Service 内部结构体，必须通过 DTO 显式挑选与组合需要暴露的字段。
 
 ## 快速开始
 

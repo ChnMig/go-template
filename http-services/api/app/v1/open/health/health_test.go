@@ -15,6 +15,13 @@ func setupTestRouter() *gin.Engine {
 	return r
 }
 
+// statusResponse 用于解析健康检查接口的统一响应结构
+type statusResponse struct {
+	Code   int       `json:"code"`
+	Status string    `json:"status"`
+	Detail StatusDTO `json:"detail"`
+}
+
 // 合并后健康检查接口的测试
 func TestStatus(t *testing.T) {
 	router := setupTestRouter()
@@ -28,20 +35,32 @@ func TestStatus(t *testing.T) {
 		t.Errorf("Status() status code = %d, want %d", w.Code, http.StatusOK)
 	}
 
-	var response map[string]interface{}
-	if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
+	var resp statusResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("Failed to parse response: %v", err)
 	}
 
-	if status, ok := response["status"].(string); !ok || status != "ok" {
-		t.Errorf("Status() status = %v, want 'ok'", response["status"])
+	if resp.Code != 200 {
+		t.Errorf("Status() response code = %d, want 200", resp.Code)
 	}
 
-	if ready, ok := response["ready"].(bool); !ok || !ready {
-		t.Errorf("Status() ready = %v, want true", response["ready"])
+	if resp.Status != "OK" {
+		t.Errorf("Status() wrapper status = %s, want 'OK'", resp.Status)
 	}
 
-	if _, ok := response["uptime"].(string); !ok {
+	if resp.Detail.Status != "ok" {
+		t.Errorf("Status() detail.status = %s, want 'ok'", resp.Detail.Status)
+	}
+
+	if !resp.Detail.Ready {
+		t.Errorf("Status() detail.ready = %v, want true", resp.Detail.Ready)
+	}
+
+	if resp.Detail.Uptime == "" {
 		t.Errorf("Status() missing uptime field")
+	}
+
+	if resp.Detail.Timestamp == 0 {
+		t.Errorf("Status() missing timestamp field")
 	}
 }

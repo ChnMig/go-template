@@ -10,6 +10,13 @@ import (
 	"http-services/config"
 )
 
+// openHealthResponse 用于解析通过路由访问健康检查接口的统一响应
+type openHealthResponse struct {
+	Code   int                    `json:"code"`
+	Status string                 `json:"status"`
+	Detail map[string]interface{} `json:"detail"`
+}
+
 // 测试开放路由是否按分层注册成功（health）
 func TestOpenHealth(t *testing.T) {
 	gin.SetMode(gin.TestMode)
@@ -26,11 +33,21 @@ func TestOpenHealth(t *testing.T) {
 		t.Fatalf("expected 200, got %d", w.Code)
 	}
 
-	var body map[string]any
+	var body openHealthResponse
 	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
 		t.Fatalf("invalid json: %v", err)
 	}
-	if status, ok := body["status"].(string); !ok || status != "ok" {
-		t.Fatalf("unexpected status: %v", body["status"])
+
+	if body.Code != 200 {
+		t.Fatalf("unexpected code: %v", body.Code)
+	}
+
+	if body.Status != "OK" {
+		t.Fatalf("unexpected wrapper status: %v", body.Status)
+	}
+
+	status, ok := body.Detail["status"].(string)
+	if !ok || status != "ok" {
+		t.Fatalf("unexpected detail.status: %v", body.Detail["status"])
 	}
 }

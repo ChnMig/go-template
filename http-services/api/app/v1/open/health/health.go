@@ -1,11 +1,11 @@
 package health
 
 import (
-	"http-services/api/response"
-	"http-services/utils/log"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"http-services/api/response"
+	"http-services/utils/log"
 )
 
 var startTime = time.Now()
@@ -15,9 +15,11 @@ var startTime = time.Now()
 func Status(c *gin.Context) {
 	l := log.FromContext(c)
 	l.Info("Health check requested")
-	response.ReturnOk(c, gin.H{
-		"status":    "ok",
-		"uptime":    time.Since(startTime).String(),
-		"timestamp": time.Now().Unix(),
-	})
+	dto := StatusDTO{
+		Status:    "ok",
+		Ready:     true,
+		Uptime:    time.Since(startTime).String(),
+		Timestamp: time.Now().Unix(),
+	}
+	response.ReturnOk(c, dto)
 }
