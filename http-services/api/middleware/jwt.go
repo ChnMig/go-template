@@ -16,12 +16,12 @@ func TokenVerify(c *gin.Context) {
 		response.ReturnError(c, response.UNAUTHENTICATED, "without token.")
 		return
 	}
-	tokenID, err := authentication.JWTDecrypt(token)
+	jwtData, err := authentication.JWTDecrypt(token)
 	if err != nil {
 		response.ReturnError(c, response.UNAUTHENTICATED, "token verify failed.")
 		return
 	}
 	// 将 JWT 数据设置到 gin.Context 中
-	c.Set("jwtData", tokenID)
+	c.Set("jwtData", jwtData)
 	c.Next()
 }
