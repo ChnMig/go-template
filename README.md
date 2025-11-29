@@ -108,6 +108,12 @@ jwt:
 
 **Important**: The `config.yaml` file is ignored by git to prevent sensitive data from being committed. Always use `config.yaml.example` as a template.
 
+### Configuration Reload & Restart
+
+当前模板虽然使用 Viper 支持监控 `config.yaml` 变更，但大部分配置（例如 `server.port`、TLS/ACME 开关、全局限流、超时配置等）只在进程启动时读取并应用，运行中的 HTTP 服务器和路由不会自动根据新配置重新构建。
+
+因此在生产环境中，**修改配置后建议始终重启服务进程**，以确保所有配置项都按预期生效；不要依赖“热更新配置”来切换是否启用 TLS、修改端口或调整全局限流策略。
+
 ## Features
 
 ### Core Components
