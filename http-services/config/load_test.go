@@ -57,6 +57,9 @@ func TestSetDefaults(t *testing.T) {
 		{"enable acme", "server.enable_acme", false},
 		{"acme domain", "server.acme_domain", ""},
 		{"acme cache dir", "server.acme_cache_dir", "acme-cert-cache"},
+		{"enable tls", "server.enable_tls", false},
+		{"tls cert file", "server.tls_cert_file", ""},
+		{"tls key file", "server.tls_key_file", ""},
 	}
 
 	for _, tt := range tests {
@@ -104,6 +107,18 @@ func TestApplyConfig(t *testing.T) {
 	if ACMECacheDir == "" {
 		t.Errorf("ACMECacheDir is empty, want non-empty default value")
 	}
+
+	if EnableTLS {
+		t.Errorf("EnableTLS = %v, want false", EnableTLS)
+	}
+
+	if TLSCertFile != "" {
+		t.Errorf("TLSCertFile = %s, want empty", TLSCertFile)
+	}
+
+	if TLSKeyFile != "" {
+		t.Errorf("TLSKeyFile = %s, want empty", TLSKeyFile)
+	}
 }
 
 func TestLoadConfigWithEnv(t *testing.T) {
@@ -113,12 +128,18 @@ func TestLoadConfigWithEnv(t *testing.T) {
 	os.Setenv("HTTP_SERVICES_SERVER_ENABLE_ACME", "true")
 	os.Setenv("HTTP_SERVICES_SERVER_ACME_DOMAIN", "api.example.com")
 	os.Setenv("HTTP_SERVICES_SERVER_ACME_CACHE_DIR", "/tmp/acme-cache")
+	os.Setenv("HTTP_SERVICES_SERVER_ENABLE_TLS", "true")
+	os.Setenv("HTTP_SERVICES_SERVER_TLS_CERT_FILE", "/tmp/server.crt")
+	os.Setenv("HTTP_SERVICES_SERVER_TLS_KEY_FILE", "/tmp/server.key")
 	defer func() {
 		os.Unsetenv("HTTP_SERVICES_SERVER_PORT")
 		os.Unsetenv("HTTP_SERVICES_JWT_EXPIRATION")
 		os.Unsetenv("HTTP_SERVICES_SERVER_ENABLE_ACME")
 		os.Unsetenv("HTTP_SERVICES_SERVER_ACME_DOMAIN")
 		os.Unsetenv("HTTP_SERVICES_SERVER_ACME_CACHE_DIR")
+		os.Unsetenv("HTTP_SERVICES_SERVER_ENABLE_TLS")
+		os.Unsetenv("HTTP_SERVICES_SERVER_TLS_CERT_FILE")
+		os.Unsetenv("HTTP_SERVICES_SERVER_TLS_KEY_FILE")
 	}()
 
 	// 重新加载配置
@@ -146,6 +167,18 @@ func TestLoadConfigWithEnv(t *testing.T) {
 
 	if ACMECacheDir != "/tmp/acme-cache" {
 		t.Errorf("ACMECacheDir = %s, want /tmp/acme-cache (from env)", ACMECacheDir)
+	}
+
+	if !EnableTLS {
+		t.Errorf("EnableTLS = %v, want true (from env)", EnableTLS)
+	}
+
+	if TLSCertFile != "/tmp/server.crt" {
+		t.Errorf("TLSCertFile = %s, want /tmp/server.crt (from env)", TLSCertFile)
+	}
+
+	if TLSKeyFile != "/tmp/server.key" {
+		t.Errorf("TLSKeyFile = %s, want /tmp/server.key (from env)", TLSKeyFile)
 	}
 }
 

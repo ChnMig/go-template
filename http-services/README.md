@@ -179,6 +179,9 @@ server:
   enable_acme: false              # 是否启用 ACME 自动 TLS（默认关闭）
   acme_domain: ""                 # ACME 证书绑定域名（启用 ACME 时必填）
   acme_cache_dir: "acme-cert-cache"  # ACME 证书缓存目录，相对路径基于程序所在目录
+  enable_tls: false               # 是否启用本地证书文件 TLS 模式（默认关闭，与 ACME 互斥）
+  tls_cert_file: ""               # 本地 TLS 证书文件路径（支持相对路径）
+  tls_key_file: ""                # 本地 TLS 私钥文件路径（支持相对路径）
   max_body_size: "10MB"           # 最大请求体大小
   max_header_bytes: 1048576       # 最大请求头大小（字节）
   shutdown_timeout: "10s"         # 优雅关闭超时时间
@@ -222,6 +225,26 @@ server:
 - 内置 ACME 更适合“单机单入口服务”的部署场景：同一台机器、同一公网 IP 上应只由一个进程实际监听 80/443 并负责证书签发；如果有多个基于本模板的服务，请仅为对外暴露的入口服务开启 `enable_acme`，其他服务保持关闭，由入口层做反向代理。
 
 如仍使用 Nginx / Caddy / Traefik / Kubernetes Ingress 等在 80/443 上对外暴露 HTTPS，也可以保持 `enable_acme: false`，由这些网关层统一管理证书。
+
+### 启用本地证书文件 TLS 模式
+
+除了 ACME 自动签发模式外，项目还支持直接使用本地证书与私钥文件提供 TLS 能力，并在证书文件发生变化时自动热更新：
+
+```yaml
+server:
+  port: 443
+  enable_acme: false
+  enable_tls: true
+  tls_cert_file: "certs/server.crt"
+  tls_key_file: "certs/server.key"
+  # 其他 server 配置略
+```
+
+说明：
+- `tls_cert_file` 与 `tls_key_file` 支持相对路径，相对基准为程序所在目录（`config.AbsPath`）；
+- 启动时会先加载一次证书，加载失败会直接退出；
+- 运行期间会使用 `fsnotify` 监听证书与私钥文件，当文件被覆盖、重命名或写入时，会自动重新加载证书并应用到后续 TLS 握手；
+- `enable_acme` 与 `enable_tls` 不能同时为 `true`，否则会在启动配置校验阶段直接报错。
 ```
 
 ### 环境变量覆盖

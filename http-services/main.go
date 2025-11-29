@@ -14,6 +14,7 @@ import (
 	"http-services/utils/acme"
 	"http-services/utils/log"
 	pathtool "http-services/utils/path-tool"
+	"http-services/utils/tlsfile"
 
 	"github.com/alecthomas/kong"
 	"go.uber.org/zap"
@@ -111,8 +112,9 @@ func main() {
 		MaxHeaderBytes: config.MaxHeaderBytes,
 	}
 
-	// 根据配置为服务挂载可选的 ACME 自动 TLS 能力
+	// 根据配置为服务挂载可选的 TLS 能力（ACME 或本地证书文件）
 	acmeCtx := acme.Setup(srv)
+	tlsFileCtx := tlsfile.Setup(srv)
 
 	// 在 goroutine 中启动服务器
 	if acmeCtx.Enabled && acmeCtx.HTTPServer != nil {
@@ -126,13 +128,12 @@ func main() {
 	}
 
 	go func() {
-		if acmeCtx.Enabled {
-			zap.L().Info("Server is starting with ACME TLS...",
+		if acmeCtx.Enabled || tlsFileCtx.Enabled {
+			zap.L().Info("Server is starting with TLS...",
 				zap.String("addr", srv.Addr),
-				zap.String("domain", config.ACMEDomain),
 			)
 			if err := srv.ListenAndServeTLS("", ""); err != nil && err != http.ErrServerClosed {
-				zap.L().Fatal("Failed to start ACME TLS server", zap.Error(err))
+				zap.L().Fatal("Failed to start TLS server", zap.Error(err))
 			}
 		} else {
 			zap.L().Info("Server is starting...")

@@ -23,6 +23,13 @@ server:
   acme_domain: ""                # 证书绑定域名，例如: "api.example.com"
   acme_cache_dir: "acme-cert-cache"  # 证书缓存目录，相对路径基于程序所在目录
 
+  # 本地证书文件 TLS 配置（可选）
+  # 启用后服务将直接使用本地证书与私钥文件提供 HTTPS 能力，并在证书/私钥文件发生变化时自动热更新
+  # 注意：ACME 与本地证书文件 TLS 模式不能同时启用，请二选一
+  enable_tls: false              # 是否启用本地证书文件 TLS 模式
+  tls_cert_file: ""              # TLS 证书文件路径（支持相对路径）
+  tls_key_file: ""               # TLS 私钥文件路径（支持相对路径）
+
   # 请求限制配置
   max_body_size: "10MB"           # 请求体大小限制，支持 KB/MB/GB
   max_header_bytes: 1048576       # 请求头大小限制（字节），默认 1MB
