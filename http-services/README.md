@@ -176,6 +176,9 @@ make run
 ```yaml
 server:
   port: 8080                      # 服务监听端口
+  enable_acme: false              # 是否启用 ACME 自动 TLS（默认关闭）
+  acme_domain: ""                 # ACME 证书绑定域名（启用 ACME 时必填）
+  acme_cache_dir: "acme-cert-cache"  # ACME 证书缓存目录，相对路径基于程序所在目录
   max_body_size: "10MB"           # 最大请求体大小
   max_header_bytes: 1048576       # 最大请求头大小（字节）
   shutdown_timeout: "10s"         # 优雅关闭超时时间
@@ -194,6 +197,31 @@ log:
   max_size: 50                    # 单个日志文件最大大小（MB）
   max_backups: 3                  # 保留的旧日志文件最大数量
   max_age: 30                     # 保留旧日志文件的最大天数
+```
+
+### 启用内置 ACME 自动 TLS
+
+项目内置基于 ACME 协议（例如 Let's Encrypt）的自动证书签发与续期能力，可通过配置一键开启：
+
+```yaml
+server:
+  port: 443
+  enable_acme: true
+  acme_domain: "api.example.com"
+  acme_cache_dir: "acme-cert-cache"
+  # 其他 server 配置略
+```
+
+使用说明：
+- 确保 `acme_domain` 已解析到当前服务所在机器的公网 IP；
+- 确保 80 与 443 端口可被公网访问（ACME HTTP-01 与 TLS-ALPN-01 验证需要）；
+- 启用后服务会：
+  - 在 `server.port`（建议 443）上以 HTTPS 形式对外提供服务；
+  - 在 80 端口开启仅用于 ACME 验证与 HTTP->HTTPS 跳转的辅助 HTTP 服务；
+  - 自动在 `acme_cache_dir` 目录下缓存证书与密钥文件。
+- 内置 ACME 更适合“单机单入口服务”的部署场景：同一台机器、同一公网 IP 上应只由一个进程实际监听 80/443 并负责证书签发；如果有多个基于本模板的服务，请仅为对外暴露的入口服务开启 `enable_acme`，其他服务保持关闭，由入口层做反向代理。
+
+如仍使用 Nginx / Caddy / Traefik / Kubernetes Ingress 等在 80/443 上对外暴露 HTTPS，也可以保持 `enable_acme: false`，由这些网关层统一管理证书。
 ```
 
 ### 环境变量覆盖

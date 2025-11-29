@@ -16,6 +16,13 @@
 server:
   port: 8080
 
+  # ACME 自动 TLS 配置（可选）
+  # 启用后服务将通过 ACME（例如 Let's Encrypt）自动签发与续期证书
+  # 注意：需要将域名解析至本服务所在机器，并确保 80/443 端口可被公网访问
+  enable_acme: false             # 是否启用 ACME 自动 TLS（默认关闭）
+  acme_domain: ""                # 证书绑定域名，例如: "api.example.com"
+  acme_cache_dir: "acme-cert-cache"  # 证书缓存目录，相对路径基于程序所在目录
+
   # 请求限制配置
   max_body_size: "10MB"           # 请求体大小限制，支持 KB/MB/GB
   max_header_bytes: 1048576       # 请求头大小限制（字节），默认 1MB

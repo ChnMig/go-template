@@ -45,6 +45,11 @@ var (
 	GlobalRateLimit int           // 全局限流速率（每秒请求数）
 	GlobalRateBurst int           // 全局限流突发容量
 
+	// TLS / ACME
+	EnableACME   bool   // 是否启用 ACME 自动签发 TLS 证书
+	ACMEDomain   string // ACME 证书绑定的域名
+	ACMECacheDir string // ACME 证书缓存目录（可为相对路径）
+
 	// Log
 	LogMaxSize    int // 日志文件最大大小（MB）
 	LogMaxBackups int // 日志文件最大备份数

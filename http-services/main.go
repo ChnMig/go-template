@@ -11,6 +11,7 @@ import (
 	"http-services/api"
 	"http-services/api/middleware"
 	"http-services/config"
+	"http-services/utils/acme"
 	"http-services/utils/log"
 	pathtool "http-services/utils/path-tool"
 
@@ -100,8 +101,9 @@ func main() {
 	r := api.InitApi()
 
 	// 创建 HTTP 服务器（使用配置化的超时参数）
+	addr := fmt.Sprintf(":%d", config.ListenPort)
 	srv := &http.Server{
-		Addr:           fmt.Sprintf(":%d", config.ListenPort),
+		Addr:           addr,
 		Handler:        r,
 		ReadTimeout:    config.ReadTimeout,
 		WriteTimeout:   config.WriteTimeout,
@@ -109,11 +111,34 @@ func main() {
 		MaxHeaderBytes: config.MaxHeaderBytes,
 	}
 
+	// 根据配置为服务挂载可选的 ACME 自动 TLS 能力
+	acmeCtx := acme.Setup(srv)
+
 	// 在 goroutine 中启动服务器
+	if acmeCtx.Enabled && acmeCtx.HTTPServer != nil {
+		// 启动 ACME HTTP 挑战服务器（80 端口）
+		go func() {
+			zap.L().Info("ACME HTTP 挑战服务器启动", zap.String("addr", acmeCtx.HTTPServer.Addr))
+			if err := acmeCtx.HTTPServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+				zap.L().Error("ACME HTTP 挑战服务器异常退出", zap.Error(err))
+			}
+		}()
+	}
+
 	go func() {
-		zap.L().Info("Server is starting...")
-		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			zap.L().Fatal("Failed to start server", zap.Error(err))
+		if acmeCtx.Enabled {
+			zap.L().Info("Server is starting with ACME TLS...",
+				zap.String("addr", srv.Addr),
+				zap.String("domain", config.ACMEDomain),
+			)
+			if err := srv.ListenAndServeTLS("", ""); err != nil && err != http.ErrServerClosed {
+				zap.L().Fatal("Failed to start ACME TLS server", zap.Error(err))
+			}
+		} else {
+			zap.L().Info("Server is starting...")
+			if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+				zap.L().Fatal("Failed to start server", zap.Error(err))
+			}
 		}
 	}()
 
@@ -131,6 +156,13 @@ func main() {
 	if err := srv.Shutdown(shutdownCtx); err != nil {
 		zap.L().Error("Server forced to shutdown", zap.Error(err))
 		// 即使服务器强制关闭，也要尝试清理资源
+	}
+
+	// 关闭 ACME HTTP 挑战服务器
+	if acmeCtx.Enabled && acmeCtx.HTTPServer != nil {
+		if err := acmeCtx.HTTPServer.Shutdown(shutdownCtx); err != nil {
+			zap.L().Error("ACME HTTP 挑战服务器关闭失败", zap.Error(err))
+		}
 	}
 
 	// 清理资源

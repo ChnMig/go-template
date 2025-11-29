@@ -62,6 +62,9 @@ func setDefaults() {
 	v.SetDefault("server.enable_rate_limit", false)
 	v.SetDefault("server.global_rate_limit", 100)
 	v.SetDefault("server.global_rate_burst", 200)
+	v.SetDefault("server.enable_acme", false)
+	v.SetDefault("server.acme_domain", "")
+	v.SetDefault("server.acme_cache_dir", "acme-cert-cache")
 
 	// JWT 默认配置
 	v.SetDefault("jwt.expiration", "12h")
@@ -97,6 +100,11 @@ func applyConfig() error {
 	EnableRateLimit = v.GetBool("server.enable_rate_limit")
 	GlobalRateLimit = v.GetInt("server.global_rate_limit")
 	GlobalRateBurst = v.GetInt("server.global_rate_burst")
+
+	// TLS / ACME 配置
+	EnableACME = v.GetBool("server.enable_acme")
+	ACMEDomain = v.GetString("server.acme_domain")
+	ACMECacheDir = v.GetString("server.acme_cache_dir")
 
 	// JWT 配置
 	JWTKey = v.GetString("jwt.key")

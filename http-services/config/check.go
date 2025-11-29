@@ -1,6 +1,8 @@
 package config
 
 import (
+	"strings"
+
 	"go.uber.org/zap"
 )
 
@@ -38,5 +40,12 @@ func CheckConfig(
 	// 检查过期时间是否设置
 	if JWTExpiration == 0 {
 		zap.L().Fatal("JWTExpiration 配置缺失，请在 config.yaml 中设置 jwt.expiration")
+	}
+
+	// 当启用 ACME 时校验域名配置
+	if EnableACME {
+		if strings.TrimSpace(ACMEDomain) == "" {
+			zap.L().Fatal("已启用 ACME，但未配置 server.acme_domain，请在 config.yaml 中设置为公网可访问的域名")
+		}
 	}
 }

@@ -54,6 +54,9 @@ func TestSetDefaults(t *testing.T) {
 		{"log max size", "log.max_size", 50},
 		{"log max backups", "log.max_backups", 3},
 		{"enable rate limit", "server.enable_rate_limit", false},
+		{"enable acme", "server.enable_acme", false},
+		{"acme domain", "server.acme_domain", ""},
+		{"acme cache dir", "server.acme_cache_dir", "acme-cert-cache"},
 	}
 
 	for _, tt := range tests {
@@ -89,15 +92,33 @@ func TestApplyConfig(t *testing.T) {
 	if LogMaxSize != 50 {
 		t.Errorf("LogMaxSize = %d, want 50", LogMaxSize)
 	}
+
+	if EnableACME {
+		t.Errorf("EnableACME = %v, want false", EnableACME)
+	}
+
+	if ACMEDomain != "" {
+		t.Errorf("ACMEDomain = %s, want empty", ACMEDomain)
+	}
+
+	if ACMECacheDir == "" {
+		t.Errorf("ACMECacheDir is empty, want non-empty default value")
+	}
 }
 
 func TestLoadConfigWithEnv(t *testing.T) {
 	// 设置环境变量
 	os.Setenv("HTTP_SERVICES_SERVER_PORT", "9090")
 	os.Setenv("HTTP_SERVICES_JWT_EXPIRATION", "24h")
+	os.Setenv("HTTP_SERVICES_SERVER_ENABLE_ACME", "true")
+	os.Setenv("HTTP_SERVICES_SERVER_ACME_DOMAIN", "api.example.com")
+	os.Setenv("HTTP_SERVICES_SERVER_ACME_CACHE_DIR", "/tmp/acme-cache")
 	defer func() {
 		os.Unsetenv("HTTP_SERVICES_SERVER_PORT")
 		os.Unsetenv("HTTP_SERVICES_JWT_EXPIRATION")
+		os.Unsetenv("HTTP_SERVICES_SERVER_ENABLE_ACME")
+		os.Unsetenv("HTTP_SERVICES_SERVER_ACME_DOMAIN")
+		os.Unsetenv("HTTP_SERVICES_SERVER_ACME_CACHE_DIR")
 	}()
 
 	// 重新加载配置
@@ -113,6 +134,18 @@ func TestLoadConfigWithEnv(t *testing.T) {
 
 	if JWTExpiration != 24*time.Hour {
 		t.Errorf("JWTExpiration = %v, want 24h (from env)", JWTExpiration)
+	}
+
+	if !EnableACME {
+		t.Errorf("EnableACME = %v, want true (from env)", EnableACME)
+	}
+
+	if ACMEDomain != "api.example.com" {
+		t.Errorf("ACMEDomain = %s, want api.example.com (from env)", ACMEDomain)
+	}
+
+	if ACMECacheDir != "/tmp/acme-cache" {
+		t.Errorf("ACMECacheDir = %s, want /tmp/acme-cache (from env)", ACMECacheDir)
 	}
 }
 
