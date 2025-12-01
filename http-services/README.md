@@ -36,7 +36,8 @@ http-services/
 │   │   └── format.go         # 响应格式化
 │   └── router.go          # 路由配置
 ├── common/               # 跨服务共享代码（常量、跨模块 DTO、公共逻辑）
-├── services/             # 领域 Service 封装，承载核心业务流程
+├── domain/               # 领域模型与领域服务（核心业务规则）
+├── services/             # 长期运行服务（如 cron、异步任务调度）
 ├── config/                # 配置管理
 │   ├── config.go          # 配置变量定义
 │   ├── load.go            # 配置加载
