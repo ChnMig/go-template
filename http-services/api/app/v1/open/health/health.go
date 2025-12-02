@@ -13,7 +13,12 @@ func Status(c *gin.Context) {
 	l := log.FromContext(c)
 	l.Info("Health check requested")
 
-	status := domain.GetStatus()
+	status, err := domain.GetStatus()
+	if err != nil {
+		// 示例：将领域错误映射为统一的接口错误响应
+		ReturnDomainError(c, err)
+		return
+	}
 
 	dto := StatusDTO{
 		Status:    status.Status,

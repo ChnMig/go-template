@@ -63,7 +63,7 @@ http-services/
 
 ```
 
-## DTO 返回规范
+## DTO 返回规范与领域分层示例
 
 为了避免直接向外暴露数据库 Model 或内部 Service 结构体，所有对外 API 的业务实体返回都应通过 DTO（Data Transfer Object，数据传输对象）进行一层映射：
 
@@ -71,9 +71,26 @@ http-services/
 - DTO 可以放在具体模块目录下（例如：`api/app/v1/open/health/dto.go`），也可以放在 `common` 目录中供多个模块复用。
 - DTO 中仅保留对外需要的字段，可对内部字段进行重命名、组合或过滤。
 
-以健康检查接口为例：
+以健康检查接口为例，完整链路为：领域层模型 → DTO → 统一响应：
 
 ```go
+// domain/health/status.go
+type Status struct {
+	Status    string
+	Ready     bool
+	Uptime    time.Duration
+	Timestamp int64
+}
+
+func GetStatus() (Status, error) {
+	return Status{
+		Status:    "ok",
+		Ready:     true,
+		Uptime:    time.Since(startTime),
+		Timestamp: time.Now().Unix(),
+	}, nil
+}
+
 // api/app/v1/open/health/dto.go
 type StatusDTO struct {
 	Status    string `json:"status"`
@@ -84,17 +101,59 @@ type StatusDTO struct {
 
 // api/app/v1/open/health/health.go
 func Status(c *gin.Context) {
+	status, err := healthDomain.GetStatus()
+	if err != nil {
+		health.ReturnDomainError(c, err)
+		return
+	}
+
 	dto := StatusDTO{
-		Status:    "ok",
-		Ready:     true,
-		Uptime:    time.Since(startTime).String(),
-		Timestamp: time.Now().Unix(),
+		Status:    status.Status,
+		Ready:     status.Ready,
+		Uptime:    status.Uptime.String(),
+		Timestamp: status.Timestamp,
 	}
 	response.ReturnOk(c, dto)
 }
 ```
 
 在实际业务开发中，禁止直接返回数据库实体（如 `db.User`）、ORM Model 或 Service 内部结构体，必须通过 DTO 显式挑选与组合需要暴露的字段。
+
+### 领域错误与 API 层错误响应示例
+
+错误码与错误信息分层：
+
+- 全局错误码：在 `api/response/code.go` 定义，例如 `FAILED_PRECONDITION`、`UNAVAILABLE`、`INTERNAL` 等；
+- 领域错误：在 `domain/<module>/errors.go` 定义具有业务语义的错误（不关心 HTTP 细节）；
+- API 层错误响应：在对应模块的 `errors.go` 中，将领域错误映射为统一响应。
+
+以健康检查模块为例：
+
+```go
+// domain/health/errors.go
+var (
+	ErrServiceNotReady  = errors.New("service not ready")
+	ErrServiceUnhealthy = errors.New("service unhealthy")
+)
+
+// api/app/v1/open/health/errors.go
+func ReturnDomainError(c *gin.Context, err error) {
+	switch {
+	case errors.Is(err, domain.ErrServiceNotReady):
+		data := response.FAILED_PRECONDITION
+		data.Code = CodeHealthServiceNotReady // 模块级自定义业务错误码
+		response.ReturnError(c, data, "服务尚未就绪，请稍后重试")
+	case errors.Is(err, domain.ErrServiceUnhealthy):
+		data := response.UNAVAILABLE
+		data.Code = CodeHealthServiceUnhealthy // 模块级自定义业务错误码
+		response.ReturnError(c, data, "服务当前不可用，请稍后重试")
+	default:
+		response.ReturnError(c, response.INTERNAL, "服务内部错误")
+	}
+}
+```
+
+handler 中在拿到领域错误后，只需要调用 `ReturnDomainError(c, err)` 即可，既保证了错误码统一，又不会把领域层实现细节泄露到接口层。
 
 ## 快速开始
 
