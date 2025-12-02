@@ -26,7 +26,7 @@ func ReturnErrorWithData(c *gin.Context, data responseData, result interface{}) 
 	data.TraceID = getTraceID(c)
 	data.Detail = result
 	c.JSON(http.StatusOK, data)
-	l.Debug("Returning error response with data", zap.Any("data", data))
+	l.Error("Returning error response with data", zap.Any("response", data))
 	// Return directly
 	c.Abort()
 }
@@ -39,7 +39,7 @@ func ReturnOk(c *gin.Context, result interface{}) {
 	data.TraceID = getTraceID(c)
 	data.Detail = result
 	c.JSON(http.StatusOK, data)
-	l.Debug("Returning OK response", zap.Any("data", data))
+	l.Debug("Returning OK response", zap.Any("response", data))
 	// Return directly
 	c.Abort()
 }
@@ -53,7 +53,7 @@ func ReturnOkWithTotal(c *gin.Context, total int, result interface{}) {
 	data.Detail = result
 	data.Total = &total
 	c.JSON(http.StatusOK, data)
-	l.Debug("Returning OK response with total", zap.Any("data", data))
+	l.Debug("Returning OK response with total", zap.Any("response", data))
 	// Return directly
 	c.Abort()
 }
@@ -67,7 +67,7 @@ func ReturnError(c *gin.Context, data responseData, message string) {
 		data.Message = message
 	}
 	c.JSON(http.StatusOK, data)
-	l.Debug("Returning error response", zap.Any("data", data))
+	l.Error("Returning error response", zap.Any("response", data))
 	// Return directly
 	c.Abort()
 }
@@ -79,7 +79,7 @@ func ReturnSuccess(c *gin.Context) {
 	data.Timestamp = time.Now().Unix()
 	data.TraceID = getTraceID(c)
 	c.JSON(http.StatusOK, data)
-	l.Debug("Returning success response", zap.Any("data", data))
+	l.Debug("Returning success response", zap.Any("response", data))
 	// Return directly
 	c.Abort()
 }

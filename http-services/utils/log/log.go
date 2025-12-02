@@ -20,6 +20,10 @@ var (
 	monitorDone chan struct{} // 用于停止监控 goroutine
 )
 
+// BoundParamsKey 用于在 gin.Context 中存放已绑定的业务参数。
+// 目前由 middleware.CheckParam 进行写入，WithRequest 进行读取，仅用于日志记录。
+const BoundParamsKey = "__bound_params__"
+
 // Creating Dev logger
 // DEV mode outputs logs to the terminal and is more readable
 func createDevLogger() *zap.Logger {
@@ -126,6 +130,7 @@ func StopMonitor() {
 	if monitorDone != nil {
 		close(monitorDone)
 	}
+
 	// 刷新日志缓冲区
 	if logger != nil {
 		_ = logger.Sync()
@@ -155,12 +160,13 @@ func FromContext(c *gin.Context) *zap.Logger {
 	return GetLogger()
 }
 
-// WithRequest 从 gin.Context 中获取带请求参数信息的 logger
+// WithRequest 从 gin.Context 中获取带请求参数信息的 logger。
 // 仅在需要排查问题时调用，避免对所有请求都记录参数。
 // 注意：为避免影响后续绑定与大体积请求处理，这里只记录：
 //   - 查询参数（query）
 //   - 已解析的表单参数（PostForm / MultipartForm.Value）
 //   - 路径参数（path params）
+//   - 通过中间件预绑定并挂载在 Context 上的业务参数（key: "__bound_params__"）
 //
 // 如需记录完整请求体（body），建议在专用中间件中提前拷贝并存入 context。
 func WithRequest(c *gin.Context) *zap.Logger {
@@ -203,6 +209,11 @@ func WithRequest(c *gin.Context) *zap.Logger {
 			pathParams[p.Key] = p.Value
 		}
 		fields = append(fields, zap.Any("path_params", pathParams))
+	}
+
+	// 已绑定的业务参数（例如通过 middleware.CheckParam 绑定的 JSON / 表单参数）
+	if bound, exists := c.Get(BoundParamsKey); exists && bound != nil {
+		fields = append(fields, zap.Any("params", bound))
 	}
 
 	return base.With(fields...)
