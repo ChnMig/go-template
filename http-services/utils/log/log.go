@@ -3,6 +3,7 @@ package log
 import (
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"http-services/config"
@@ -107,6 +108,37 @@ func GetLogger() *zap.Logger {
 		SetLogger()
 	}
 	return logger
+}
+
+// zapWriter 是一个 io.Writer 实现，用于将框架类日志（如 gin/gorm）转发到 zap
+type zapWriter struct {
+	logger *zap.Logger
+	level  zapcore.Level
+}
+
+// Write 实现 io.Writer 接口，将写入内容作为消息输出到 zap
+func (w *zapWriter) Write(p []byte) (n int, err error) {
+	if w == nil || w.logger == nil {
+		// 在 logger 尚未初始化的场景中避免 panic，同时不阻塞调用方
+		return len(p), nil
+	}
+
+	msg := strings.TrimRight(string(p), "\r\n")
+	if ce := w.logger.Check(w.level, msg); ce != nil {
+		ce.Write()
+	}
+	return len(p), nil
+}
+
+// NewZapWriter 创建一个基于 zap 的 io.Writer，方便将第三方日志重定向到统一的 zap 日志管道
+func NewZapWriter(l *zap.Logger, level zapcore.Level) *zapWriter {
+	if l == nil {
+		l = GetLogger()
+	}
+	return &zapWriter{
+		logger: l,
+		level:  level,
+	}
 }
 
 func init() {

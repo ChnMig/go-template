@@ -4,14 +4,27 @@ import (
 	"http-services/api/app"
 	"http-services/api/middleware"
 	"http-services/config"
+	httplog "http-services/utils/log"
 
 	"github.com/gin-gonic/gin"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 )
 
 // InitApi 初始化 API 路由
 // 顶层仅负责：gin 初始化、全局中间件、挂载 /api 分组
 // 具体业务路由由 app 层逐级（app -> v1 -> open/private -> module）注册
 func InitApi() *gin.Engine {
+	// 将 gin 的默认日志输出重定向到 zap，保持框架日志与业务日志统一
+	// 注意：main 中会在 InitApi 之前完成 zap 初始化
+	ginLogWriter := httplog.NewZapWriter(zap.L().With(zap.String("logger", "gin")), zapcore.InfoLevel)
+	ginErrorWriter := httplog.NewZapWriter(
+		zap.L().With(zap.String("logger", "gin"), zap.String("stream", "stderr")),
+		zapcore.ErrorLevel,
+	)
+	gin.DefaultWriter = ginLogWriter
+	gin.DefaultErrorWriter = ginErrorWriter
+
 	// gin.Default uses Use by default. Two global middlewares are added, Logger(), Recovery(), Logger is to print logs, Recovery is panic and returns 500
 	gin.SetMode(gin.ReleaseMode)
 	router := gin.Default()
