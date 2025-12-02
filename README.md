@@ -1,40 +1,40 @@
 # go-template
 
-Golang project templates
+Golang 项目模板集合
 
-## Not necessarily for everyone.
+## 项目简介
 
-The goal of go-template is to improve productivity, not simplicity.😉
+go-template 的目标是**提高开发效率，而不是极致简化**。😉  
+因此模板中会默认集成一些“够好用”的第三方库😊，并在实践中持续打磨，让它们在工程化和可维护性上也“足够好”😋。
 
-So there's going to be some third-party modules that are good enough😊, and of course, my have to make sure that they're good enough😋. 
+本仓库目前主要包含一个 HTTP API 服务模板 `http-services`，适合作为中小型后端服务的起步工程。
 
-## Download templates with gonew
+## 使用 gonew 下载模板
 
-These templates were designed to work and be downloaded with 
-[gonew](https://pkg.go.dev/golang.org/x/tools/cmd/gonew).
+推荐通过 [gonew](https://pkg.go.dev/golang.org/x/tools/cmd/gonew) 下载并初始化项目，这样可以直接指定新模块名，而不是简单拷贝。
 
-## directory
+## 目录结构
 
 ### http-services
 
-Suitable for use as a http-api service template.
+适合作为 HTTP API 服务模板使用。
 
-## Quick Start
+## 快速开始（Quick Start）
 
-### Setup
+### 初始化配置
 
-1. Copy the example configuration file:
+1. 拷贝示例配置文件：
 
    ```bash
    cd http-services
    cp config.yaml.example config.yaml
    ```
 
-2. Edit `config.yaml` and update the values, especially:
+2. 编辑 `config.yaml` 并根据实际环境修改配置，尤其是：
    - `jwt.key`: **必须修改为至少32字符的强密钥** (服务启动时会进行安全检查)
-   - `jwt.expiration`: Set token expiration time (e.g., "12h", "24h", "30m")
+   - `jwt.expiration`: 访问令牌有效期（例如 `"12h"`、`"24h"`、`"30m"`）
 
-3. Build and run:
+3. 构建并运行：
 
    ```bash
    # 显示帮助
@@ -50,35 +50,35 @@ Suitable for use as a http-api service template.
    make dev
    ```
 
-### Cross-Platform Packaging
+### 跨平台打包（Cross-Platform Packaging）
 
-Use the Makefile to package binaries for multiple platforms. Artifacts are placed under `dist/` with version, OS and ARCH in the filename.
+通过 `Makefile` 可以一次性为多个平台打包可执行文件，产物会输出到 `dist/` 目录下，文件名中包含版本号、操作系统和架构信息。
 
-Basic usage:
+基础用法：
 
 ```bash
 cd http-services
 
-# Cross-compile and package (tar.gz on Unix, zip on Windows)
+# 交叉编译并打包（Unix 使用 tar.gz，Windows 使用 zip）
 make build CROSS=1
-# or explicitly
+# 或者显式调用
 make build-cross
 ```
 
-Customize target platforms via `PLATFORMS` (defaults: `linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64`):
+通过环境变量 `PLATFORMS` 可以自定义目标平台（默认：`linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64`）：
 
 ```bash
 make build CROSS=1 \
   PLATFORMS="linux/amd64 linux/arm64 darwin/arm64 windows/amd64"
 ```
 
-Notes:
-- Binaries embed version metadata: `Version`, `BuildTime`, `GitCommit`.
-- `CGO_ENABLED=0` by default; override if you depend on CGO.
-- Extra files included alongside binaries if present: `README.md`, `config.yaml.example`.
-- Windows packages are zipped when `zip` is available; others use `.tar.gz`.
+说明：
+- 产物二进制会内嵌版本信息：`Version`、`BuildTime`、`GitCommit`。
+- 默认使用 `CGO_ENABLED=0`；如依赖 CGO，可自行覆盖。
+- 若存在 `README.md`、`config.yaml.example` 等文件，会一并打包到发布目录。
+- Windows 平台在系统存在 `zip` 命令时使用 `.zip`，其余平台使用 `.tar.gz`。
 
-### Command Line Options
+### 命令行参数（Command Line Options）
 
 ```bash
 # 开发模式
@@ -93,9 +93,9 @@ Notes:
 
 ## Configuration
 
-The project uses a YAML configuration file for managing settings.
+该项目通过 YAML 配置文件管理服务参数。
 
-### Configuration File Structure
+### 配置文件示例结构（简化）
 
 ```yaml
 server:
@@ -106,7 +106,7 @@ jwt:
   expiration: "12h"
 ```
 
-**Important**: The `config.yaml` file is ignored by git to prevent sensitive data from being committed. Always use `config.yaml.example` as a template.
+**重要说明**：`config.yaml` 已被加入 `.gitignore`，避免敏感配置被提交到仓库。请始终以 `config.yaml.example` 为模版创建本地配置。
 
 ### Configuration Reload & Restart
 
@@ -114,59 +114,59 @@ jwt:
 
 因此在生产环境中，**修改配置后建议始终重启服务进程**，以确保所有配置项都按预期生效；不要依赖“热更新配置”来切换是否启用 TLS、修改端口或调整全局限流策略。
 
-## Features
+## 功能特性（Features）
 
-### Core Components
+### 核心能力（Core Components）
 
-- **JWT Authentication**: Standard JWT authentication with security validation
-- **CORS**: Cross-Origin Resource Sharing middleware
-- **Password Encryption**: BCrypt-based secure password hashing
-- **Pagination**: Built-in pagination support with configurable defaults
-- **Graceful Shutdown**: Proper HTTP server graceful shutdown with 10s timeout
-- **Health Checks**: `/health` and `/ready` endpoints for monitoring
+- **JWT 鉴权**：基于 `JWT` 的标准认证流程，包含基础安全校验
+- **CORS**：跨域请求中间件
+- **密码加密**：使用 `BCrypt` 进行安全密码哈希
+- **分页能力**：内置分页工具，支持可配置默认值
+- **优雅下线（Graceful Shutdown）**：HTTP 服务器支持 10s 超时的优雅关闭
+- **健康检查**：提供 `/health` 和 `/ready` 等监控探针接口
 
-### Middleware
+### 中间件（Middleware）
 
-- `RequestID`: Request ID tracking for distributed tracing
-- `SecurityHeaders`: Security response headers (X-Content-Type-Options, X-Frame-Options, etc.)
-- `BodySizeLimit`: Request body size limit (default 10MB)
-- `TokenVerify`: JWT authentication middleware
-- `CorssDomainHandler`: CORS middleware
-- `IPRateLimit`: IP-based rate limiting with token bucket algorithm
-- `TokenRateLimit`: Token-based rate limiting for authenticated users
+- `RequestID`：为每个请求生成并传播请求 ID，支持链路追踪
+- `SecurityHeaders`：设置常用安全响应头（如 `X-Content-Type-Options`、`X-Frame-Options` 等）
+- `BodySizeLimit`：请求体大小限制（默认 10MB），防止大包攻击
+- `TokenVerify`：JWT 鉴权中间件
+- `CorssDomainHandler`：跨域（CORS）处理中间件
+- `IPRateLimit`：基于 IP 的令牌桶限流
+- `TokenRateLimit`：基于登录用户 Token 的限流
 
-### Utilities
+### 工具类（Utilities）
 
-- **Authentication** (`util/authentication`):
-  - JWT token generation and parsing
-  - HS256 signing and verification
-  - Standard claims support
+- **Authentication**（`util/authentication`）：
+  - JWT 生成与解析
+  - HS256 签名与校验
+  - 标准 claims 支持
 
-- **Encryption** (`util/encryption`):
-  - BCrypt password hashing
-  - Password verification
+- **Encryption**（`util/encryption`）：
+  - 使用 `BCrypt` 的密码哈希
+  - 密码校验工具
 
-- **ID Generation** (`util/id`):
-  - Sonyflake-based distributed unique ID generation
-  - MD5-based unique ID generation
+- **ID Generation**（`util/id`）：
+  - 基于 `Sonyflake` 的分布式唯一 ID
+  - 基于 MD5 的唯一 ID 生成
 
-- **Logging** (`utils/log`):
+- **Logging**（`utils/log`）：
   - 基于 `go.uber.org/zap` 的结构化日志（structured logging），支持开发/生产两种输出模式
   - 在 `api.InitApi` 中将 Gin 的默认访问日志和错误日志重定向到 zap，框架日志与业务日志统一输出
   - 提供从 `gin.Context` 获取带请求上下文信息的 logger，方便接口内按请求维度记录日志
 
-### Dependencies
+### 依赖（Dependencies）
 
-Key dependencies include:
+主要三方依赖包括：
 
-- `github.com/gin-gonic/gin` - Web framework
-- `github.com/golang-jwt/jwt/v5` - JWT implementation
-- `github.com/goccy/go-yaml` - YAML parser
-- `github.com/alecthomas/kong` - Command line parser
-- `golang.org/x/crypto/bcrypt` - Password encryption
-- `go.uber.org/zap` - Structured logging
+- `github.com/gin-gonic/gin`：Web 框架
+- `github.com/golang-jwt/jwt/v5`：JWT 实现
+- `github.com/goccy/go-yaml`：YAML 解析
+- `github.com/alecthomas/kong`：命令行解析
+- `golang.org/x/crypto/bcrypt`：密码加密
+- `go.uber.org/zap`：结构化日志
 
-### Logging（接口内 zap 使用约定）
+### 日志说明：接口内 zap 使用约定（Logging）
 
 本模板统一使用 `go.uber.org/zap` 作为日志组件，相关封装位于 `http-services/utils/log` 包：
 
@@ -203,57 +203,57 @@ func (h *Handler) GetUser(c *gin.Context) {
 - 正常业务日志：优先使用 `httplog.FromContext(c)`，保证所有日志都带有 `trace_id`，便于链路追踪。
 - 深度排查问题时：在局部（例如特定 handler）使用 `httplog.WithRequest(c)` 打印请求参数，避免对所有请求都记录大体积参数导致日志膨胀。
 
-## Project Structure
+## 项目结构（Project Structure）
 
 ```text
 http-services/
 ├── api/
-│   ├── app/              # API handlers
-│   │   ├── example/      # Example API endpoints
-│   │   └── health/       # Health check endpoints
-│   ├── middleware/       # Middleware components
-│   └── response/         # Response formatters
-├── config/               # Configuration management
-├── utils/                # Utility packages
-│   ├── authentication/   # JWT utilities (with tests)
-│   ├── encryption/       # Password encryption (with tests)
-│   ├── id/              # ID generation (with tests)
-│   ├── log/             # Logging
-│   ├── path-tool/       # Path utilities
-│   └── run-model/       # Runtime mode utilities
-├── db/                   # Database layer (placeholder)
-├── services/             # Business logic layer (placeholder)
-├── common/               # Common utilities (placeholder)
-└── main.go              # Application entry point
+│   ├── app/              # 业务接口入口
+│   │   ├── example/      # 示例接口（如有）
+│   │   └── health/       # 健康检查接口
+│   ├── middleware/       # 中间件组件
+│   └── response/         # 统一响应封装
+├── config/               # 配置加载与校验
+├── utils/                # 通用工具包
+│   ├── authentication/   # JWT 工具（含测试）
+│   ├── encryption/       # 密码加密工具（含测试）
+│   ├── id/               # ID 生成工具（含测试）
+│   ├── log/              # 日志封装
+│   ├── path-tool/       # 路径工具
+│   └── run-model/       # 运行模式工具
+├── db/                   # 数据库层（预留）
+├── services/             # 业务服务层（预留）
+├── common/               # 公共通用层（预留）
+└── main.go              # 应用入口
 ```
 
-## Testing
+## 测试（Testing）
 
-Run all tests:
+运行全部测试：
 
 ```bash
 make test
 ```
 
-Run tests with coverage:
+运行带覆盖率的测试：
 
 ```bash
 go test -cover ./...
 ```
 
-Current test coverage includes:
-- JWT authentication and token handling
-- BCrypt password hashing and verification
-- ID generation (Sonyflake + MD5)
+当前已覆盖的主要测试包括：
+- JWT 鉴权与 Token 处理
+- BCrypt 密码哈希与校验
+- ID 生成（Sonyflake + MD5）
 
-## Security Features
+## 安全特性（Security Features）
 
-- **JWT Key Validation**: Server refuses to start with weak or default JWT keys
-- **Request Body Size Limit**: Prevents DoS attacks from large payloads
-- **Security Headers**: Automatic security headers for all responses
-- **Rate Limiting**: Configurable rate limiting per IP or authenticated user
-- **Request ID Tracking**: Distributed tracing support
+- **JWT 密钥校验**：启动时会检测 JWT 密钥强度，弱密钥或默认值会拒绝启动
+- **请求体大小限制**：通过 `BodySizeLimit` 防止大体积请求导致的 DoS 风险
+- **安全响应头**：自动为响应添加通用安全 Header
+- **限流能力**：支持按 IP 或登录用户 Token 进行限流
+- **请求 ID 追踪**：通过 `RequestID` 中间件支持链路追踪与问题排查
 
-## Development Notes
+## 开发说明（Development Notes）
 
-This template is based on [art-design-pro-edge-go-server](https://github.com/ChnMig/art-design-pro-edge-go-server) and includes regularly synchronized updates to core components.
+本模板基于 [art-design-pro-edge-go-server](https://github.com/ChnMig/art-design-pro-edge-go-server) 演进而来，会持续同步其核心能力更新，并针对通用场景做适配与精简。
