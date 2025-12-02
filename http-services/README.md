@@ -619,9 +619,14 @@ zap.L().Info("业务事件", zap.String("action", "process"))
 zap.L().Error("操作失败", zap.Error(err))
 zap.L().Debug("调试信息", zap.Any("data", data))
 
-// api 层获取日志实例
+// api 层获取日志实例（仅带基础上下文，如 trace_id、method、path）
 log := log.FromContext(c)
 log.Info("处理请求", zap.String("path", c.Request.URL.Path))
+
+// 如需在排查问题时同时记录本次请求的参数（query / 表单 / 路径参数），
+// 可以使用 WithRequest 获取带请求参数字段的 logger：
+log := log.WithRequest(c)
+log.Error("处理请求失败", zap.Error(err))
 ```
 
 ## 命令行参数

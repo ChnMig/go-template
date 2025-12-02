@@ -39,13 +39,13 @@ func RequestID() gin.HandlerFunc {
 		)
 		c.Set("logger", contextLogger)
 
-		// 记录请求开始
-		contextLogger.Info("Request started")
+		// 记录请求开始（调试级别）
+		contextLogger.Debug("Request started")
 
 		c.Next()
 
-		// 记录请求完成（包含状态码）
-		contextLogger.Info("Request completed",
+		// 记录请求完成（包含状态码，调试级别）
+		contextLogger.Debug("Request completed",
 			zap.Int("status_code", c.Writer.Status()),
 		)
 	}

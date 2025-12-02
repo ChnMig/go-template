@@ -1,6 +1,7 @@
 package log
 
 import (
+	"net/http"
 	"os"
 	"time"
 
@@ -125,7 +126,6 @@ func StopMonitor() {
 	if monitorDone != nil {
 		close(monitorDone)
 	}
-
 	// 刷新日志缓冲区
 	if logger != nil {
 		_ = logger.Sync()
@@ -153,4 +153,57 @@ func FromContext(c *gin.Context) *zap.Logger {
 	// 如果没有上下文 logger，返回全局 logger
 	// 这种情况通常发生在测试或者中间件执行顺序问题
 	return GetLogger()
+}
+
+// WithRequest 从 gin.Context 中获取带请求参数信息的 logger
+// 仅在需要排查问题时调用，避免对所有请求都记录参数。
+// 注意：为避免影响后续绑定与大体积请求处理，这里只记录：
+//   - 查询参数（query）
+//   - 已解析的表单参数（PostForm / MultipartForm.Value）
+//   - 路径参数（path params）
+//
+// 如需记录完整请求体（body），建议在专用中间件中提前拷贝并存入 context。
+func WithRequest(c *gin.Context) *zap.Logger {
+	base := FromContext(c)
+
+	// 在单元测试或特殊场景中，Context 可能尚未完全初始化，
+	// 此时直接返回基础 logger，避免空指针异常。
+	if c == nil || c.Request == nil {
+		return base
+	}
+
+	fields := []zap.Field{
+		zap.String("method", c.Request.Method),
+	}
+
+	if c.Request.URL != nil {
+		fields = append(fields, zap.String("path", c.Request.URL.Path))
+		// 查询参数
+		if rawQuery := c.Request.URL.RawQuery; rawQuery != "" {
+			fields = append(fields, zap.String("query", rawQuery))
+		}
+	}
+
+	// 已解析的表单参数（不会主动触发 ParseForm，避免多次读取 Body）
+	if c.Request.Method == http.MethodPost || c.Request.Method == http.MethodPut || c.Request.Method == http.MethodPatch {
+		// 普通表单
+		if len(c.Request.PostForm) > 0 {
+			fields = append(fields, zap.Any("form", c.Request.PostForm))
+		}
+		// multipart 表单
+		if c.Request.MultipartForm != nil && len(c.Request.MultipartForm.Value) > 0 {
+			fields = append(fields, zap.Any("multipart_form", c.Request.MultipartForm.Value))
+		}
+	}
+
+	// 路径参数
+	if len(c.Params) > 0 {
+		pathParams := make(map[string]string, len(c.Params))
+		for _, p := range c.Params {
+			pathParams[p.Key] = p.Value
+		}
+		fields = append(fields, zap.Any("path_params", pathParams))
+	}
+
+	return base.With(fields...)
 }
