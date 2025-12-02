@@ -150,6 +150,11 @@ jwt:
   - Sonyflake-based distributed unique ID generation
   - MD5-based unique ID generation
 
+- **Logging** (`utils/log`):
+  - 基于 `go.uber.org/zap` 的结构化日志（structured logging），支持开发/生产两种输出模式
+  - 在 `api.InitApi` 中将 Gin 的默认访问日志和错误日志重定向到 zap，框架日志与业务日志统一输出
+  - 提供从 `gin.Context` 获取带请求上下文信息的 logger，方便接口内按请求维度记录日志
+
 ### Dependencies
 
 Key dependencies include:
@@ -160,6 +165,43 @@ Key dependencies include:
 - `github.com/alecthomas/kong` - Command line parser
 - `golang.org/x/crypto/bcrypt` - Password encryption
 - `go.uber.org/zap` - Structured logging
+
+### Logging（接口内 zap 使用约定）
+
+本模板统一使用 `go.uber.org/zap` 作为日志组件，相关封装位于 `http-services/utils/log` 包：
+
+- 运行模式（开发 / 生产）由 `config.RunModel` 控制：开发模式输出到终端，生产模式输出到按日期滚动的日志文件。
+- 在 `api.InitApi` 中通过 `httplog.NewZapWriter` 将 Gin 的默认日志输出（访问日志、panic 等）重定向到 zap，框架日志与业务日志走同一管道。
+- `RequestID` 中间件会为每个请求生成 `trace_id`，并在 `gin.Context` 中注入带 `trace_id`、`method`、`path`、`client_ip` 等字段的 logger。
+
+在接口 handler 中，推荐按如下方式使用 zap：
+
+```go
+import (
+    httplog "http-services/utils/log"
+
+    "github.com/gin-gonic/gin"
+    "go.uber.org/zap"
+)
+
+func (h *Handler) GetUser(c *gin.Context) {
+    // 推荐使用 FromContext 获取带 trace_id 等上下文信息的 logger
+    logger := httplog.FromContext(c)
+    logger.Info("获取用户信息",
+        zap.String("user_id", c.Param("id")),
+    )
+
+    // 仅在排查请求参数相关问题时，使用 WithRequest 追加请求详情字段
+    // 默认不会记录请求体（body），只记录 query / form / 路径参数 / 预绑定业务参数
+    debugLogger := httplog.WithRequest(c)
+    debugLogger.Debug("请求参数详情日志")
+}
+```
+
+一般情况下：
+
+- 正常业务日志：优先使用 `httplog.FromContext(c)`，保证所有日志都带有 `trace_id`，便于链路追踪。
+- 深度排查问题时：在局部（例如特定 handler）使用 `httplog.WithRequest(c)` 打印请求参数，避免对所有请求都记录大体积参数导致日志膨胀。
 
 ## Project Structure
 
