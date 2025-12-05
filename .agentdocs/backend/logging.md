@@ -208,6 +208,15 @@ export HTTP_SERVICES_LOG_MAX_AGE=60
    )
    ```
 
+5. **错误响应前统一记录 Error 日志**
+   ```go
+   func ReturnDomainError(c *gin.Context, err error) {
+       // 在统一错误映射处记录真实的领域错误和请求上下文，便于排查
+       log.WithRequest(c).Error("健康检查领域错误", zap.Error(err))
+       // ...根据 err 映射统一错误响应...
+   }
+   ```
+
 ### ❌ 避免做法
 
 1. **不要在循环中记录过多日志**

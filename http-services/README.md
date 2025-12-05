@@ -138,6 +138,9 @@ var (
 
 // api/app/v1/open/health/errors.go
 func ReturnDomainError(c *gin.Context, err error) {
+	// 在统一错误映射前记录真实的领域错误和请求上下文，便于排查
+	log.WithRequest(c).Error("健康检查领域错误", zap.Error(err))
+
 	switch {
 	case errors.Is(err, domain.ErrServiceNotReady):
 		data := response.FAILED_PRECONDITION

@@ -3,9 +3,12 @@ package health
 import (
 	"errors"
 
-	"github.com/gin-gonic/gin"
 	"http-services/api/response"
 	domain "http-services/domain/health"
+	"http-services/utils/log"
+
+	"github.com/gin-gonic/gin"
+	"go.uber.org/zap"
 )
 
 // 模块级业务错误码定义（仅在 health 模块内部使用）
@@ -19,6 +22,9 @@ const (
 // ReturnDomainError 将领域层健康检查错误映射为统一的接口错误响应
 // 示例：根据 ErrServiceNotReady / ErrServiceUnhealthy 返回不同的错误码与提示文案
 func ReturnDomainError(c *gin.Context, err error) {
+	// 在统一错误映射前使用带 trace_id 等上下文信息的 logger 记录领域错误
+	log.WithRequest(c).Error("健康检查领域错误", zap.Error(err))
+
 	switch {
 	case errors.Is(err, domain.ErrServiceNotReady):
 		// 服务尚未就绪，基础码使用 FAILED_PRECONDITION，业务码使用模块内自定义 code

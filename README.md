@@ -202,6 +202,7 @@ func (h *Handler) GetUser(c *gin.Context) {
 
 - 正常业务日志：优先使用 `httplog.FromContext(c)`，保证所有日志都带有 `trace_id`，便于链路追踪。
 - 深度排查问题时：在局部（例如特定 handler）使用 `httplog.WithRequest(c)` 打印请求参数，避免对所有请求都记录大体积参数导致日志膨胀。
+- 错误处理：在向客户端返回错误响应之前，必须至少记录一条 `Error` 级别日志，且日志消息与字段应能够反映真实错误原因，避免使用“操作失败”这类模糊描述；推荐在统一错误映射函数（如 `ReturnDomainError`）中调用 `httplog.WithRequest(c).Error("健康检查领域错误", zap.Error(err))` 统一记录错误日志。
 
 ## 项目结构（Project Structure）
 
