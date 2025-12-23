@@ -44,6 +44,7 @@ var (
 	EnableRateLimit bool          // 是否启用全局限流
 	GlobalRateLimit int           // 全局限流速率（每秒请求数）
 	GlobalRateBurst int           // 全局限流突发容量
+	PidFile         string        // pid 文件路径（支持相对路径，相对 AbsPath）
 
 	// TLS / ACME
 	EnableACME   bool   // 是否启用 ACME 自动签发 TLS 证书

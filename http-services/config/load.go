@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"path/filepath"
 	"strings"
 
 	"github.com/fsnotify/fsnotify"
@@ -62,6 +63,7 @@ func setDefaults() {
 	v.SetDefault("server.enable_rate_limit", false)
 	v.SetDefault("server.global_rate_limit", 100)
 	v.SetDefault("server.global_rate_burst", 200)
+	v.SetDefault("server.pid_file", "http-services.pid")
 	v.SetDefault("server.enable_acme", false)
 	v.SetDefault("server.acme_domain", "")
 	v.SetDefault("server.acme_cache_dir", "acme-cert-cache")
@@ -103,6 +105,12 @@ func applyConfig() error {
 	EnableRateLimit = v.GetBool("server.enable_rate_limit")
 	GlobalRateLimit = v.GetInt("server.global_rate_limit")
 	GlobalRateBurst = v.GetInt("server.global_rate_burst")
+
+	// pid 文件（相对路径基于程序所在目录）
+	PidFile = v.GetString("server.pid_file")
+	if PidFile != "" && !filepath.IsAbs(PidFile) {
+		PidFile = filepath.Join(AbsPath, PidFile)
+	}
 
 	// TLS / ACME 配置
 	EnableACME = v.GetBool("server.enable_acme")

@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -14,6 +15,7 @@ import (
 	"http-services/utils/acme"
 	"http-services/utils/log"
 	pathtool "http-services/utils/path-tool"
+	"http-services/utils/pidfile"
 	"http-services/utils/tlsfile"
 
 	"github.com/alecthomas/kong"
@@ -116,6 +118,26 @@ func main() {
 	acmeCtx := acme.Setup(srv)
 	tlsFileCtx := tlsfile.Setup(srv)
 
+	// 监听停止信号（尽早注册，避免启动阶段收到信号时错过清理流程）
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGTERM, syscall.SIGINT)
+
+	pidFilePath := config.PidFile
+	// 写入 pid 文件（存在则覆盖，确保每次启动都会刷新）
+	if pidFilePath != "" {
+		pid := os.Getpid()
+		if err := pidfile.Write(pidFilePath, pid); err != nil {
+			zap.L().Fatal("写入 pid 文件失败",
+				zap.String("pid_file", pidFilePath),
+				zap.Error(err),
+			)
+		}
+		zap.L().Info("PID 文件已写入",
+			zap.String("pid_file", pidFilePath),
+			zap.Int("pid", pid),
+		)
+	}
+
 	// 在 goroutine 中启动服务器
 	if acmeCtx.Enabled && acmeCtx.HTTPServer != nil {
 		// 启动 ACME HTTP 挑战服务器（80 端口）
@@ -127,42 +149,52 @@ func main() {
 		}()
 	}
 
+	serverErrCh := make(chan error, 1)
 	go func() {
+		var err error
 		if acmeCtx.Enabled || tlsFileCtx.Enabled {
 			zap.L().Info("Server is starting with TLS...",
 				zap.String("addr", srv.Addr),
 			)
-			if err := srv.ListenAndServeTLS("", ""); err != nil && err != http.ErrServerClosed {
-				zap.L().Fatal("Failed to start TLS server", zap.Error(err))
-			}
+			err = srv.ListenAndServeTLS("", "")
 		} else {
 			zap.L().Info("Server is starting...")
-			if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-				zap.L().Fatal("Failed to start server", zap.Error(err))
-			}
+			err = srv.ListenAndServe()
+		}
+
+		if err != nil && err != http.ErrServerClosed {
+			serverErrCh <- err
 		}
 	}()
 
-	// 监听停止信号
-	quit := make(chan os.Signal, 1)
-	signal.Notify(quit, syscall.SIGTERM, syscall.SIGINT)
-	sig := <-quit
-	zap.L().Info("Received stop signal, shutting down gracefully", zap.String("signal", sig.String()))
+	exitCode := 0
+	select {
+	case sig := <-quit:
+		zap.L().Info("Received stop signal, shutting down gracefully", zap.String("signal", sig.String()))
+	case err := <-serverErrCh:
+		exitCode = 1
+		zap.L().Error("HTTP 服务异常退出，开始执行清理与退出",
+			zap.Error(err),
+		)
+	}
 
 	// 创建带超时的 context 用于优雅关闭（使用配置化的超时时间）
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), config.ShutdownTimeout)
-	defer cancel()
 
 	// 优雅关闭服务器
 	if err := srv.Shutdown(shutdownCtx); err != nil {
-		zap.L().Error("Server forced to shutdown", zap.Error(err))
+		if !errors.Is(err, http.ErrServerClosed) {
+			zap.L().Error("Server forced to shutdown", zap.Error(err))
+		}
 		// 即使服务器强制关闭，也要尝试清理资源
 	}
 
 	// 关闭 ACME HTTP 挑战服务器
 	if acmeCtx.Enabled && acmeCtx.HTTPServer != nil {
 		if err := acmeCtx.HTTPServer.Shutdown(shutdownCtx); err != nil {
-			zap.L().Error("ACME HTTP 挑战服务器关闭失败", zap.Error(err))
+			if !errors.Is(err, http.ErrServerClosed) {
+				zap.L().Error("ACME HTTP 挑战服务器关闭失败", zap.Error(err))
+			}
 		}
 	}
 
@@ -171,6 +203,16 @@ func main() {
 	middleware.CleanupAllLimiters() // 清理限流器
 	log.StopMonitor()               // 停止日志监控并刷新缓冲区
 
-	zap.L().Info("Server exited gracefully")
-	ctx.Exit(0)
+	// 删除 pid 文件（文件不存在视为成功）
+	if err := pidfile.Remove(pidFilePath); err != nil {
+		zap.L().Warn("删除 pid 文件失败",
+			zap.String("pid_file", pidFilePath),
+			zap.Error(err),
+		)
+	}
+
+	cancel()
+
+	zap.L().Info("Server exited", zap.Int("exit_code", exitCode))
+	ctx.Exit(exitCode)
 }

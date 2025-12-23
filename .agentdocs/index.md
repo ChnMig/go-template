@@ -12,6 +12,7 @@
 - 项目使用 YAML 配置文件管理配置项，配置文件位于 `http-services/config.yaml`
 - 配置文件已加入 `.gitignore`，使用 `config.yaml.example` 作为模板
 - 所有配置支持通过环境变量覆盖，格式为 `HTTP_SERVICES_<SECTION>_<KEY>`
+- `server.pid_file` 用于记录当前进程 pid：启动写入/刷新，优雅退出时自动删除
 - 所有配置加载在程序启动时完成，并在 logger 初始化后进行校验
 - 项目基于 art-design-pro-edge-go-server 框架，定期同步基础组件更新
 - 使用标准JWT认证，简洁高效

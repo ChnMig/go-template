@@ -15,6 +15,7 @@
 
 server:
   port: 8080
+  pid_file: "http-services.pid"     # pid 文件路径（支持相对路径，相对程序所在目录）；服务退出时会自动删除
 
   # ACME 自动 TLS 配置（可选）
   # 启用后服务将通过 ACME（例如 Let's Encrypt）自动签发与续期证书

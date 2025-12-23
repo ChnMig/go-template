@@ -2,6 +2,7 @@ package config
 
 import (
 	"os"
+	"path/filepath"
 	"testing"
 	"time"
 )
@@ -50,6 +51,7 @@ func TestSetDefaults(t *testing.T) {
 	}{
 		{"server port", "server.port", 8080},
 		{"max body size", "server.max_body_size", "10MB"},
+		{"pid file", "server.pid_file", "http-services.pid"},
 		{"jwt expiration", "jwt.expiration", "12h"},
 		{"log max size", "log.max_size", 50},
 		{"log max backups", "log.max_backups", 3},
@@ -92,6 +94,10 @@ func TestApplyConfig(t *testing.T) {
 		t.Errorf("JWTExpiration = %v, want %v", JWTExpiration, 12*time.Hour)
 	}
 
+	if filepath.Base(PidFile) != "http-services.pid" {
+		t.Errorf("PidFile = %s, want base http-services.pid", PidFile)
+	}
+
 	if LogMaxSize != 50 {
 		t.Errorf("LogMaxSize = %d, want 50", LogMaxSize)
 	}
@@ -125,6 +131,8 @@ func TestLoadConfigWithEnv(t *testing.T) {
 	// 设置环境变量
 	os.Setenv("HTTP_SERVICES_SERVER_PORT", "9090")
 	os.Setenv("HTTP_SERVICES_JWT_EXPIRATION", "24h")
+	pidPath := filepath.Join(t.TempDir(), "http-services.pid")
+	os.Setenv("HTTP_SERVICES_SERVER_PID_FILE", pidPath)
 	os.Setenv("HTTP_SERVICES_SERVER_ENABLE_ACME", "true")
 	os.Setenv("HTTP_SERVICES_SERVER_ACME_DOMAIN", "api.example.com")
 	os.Setenv("HTTP_SERVICES_SERVER_ACME_CACHE_DIR", "/tmp/acme-cache")
@@ -134,6 +142,7 @@ func TestLoadConfigWithEnv(t *testing.T) {
 	defer func() {
 		os.Unsetenv("HTTP_SERVICES_SERVER_PORT")
 		os.Unsetenv("HTTP_SERVICES_JWT_EXPIRATION")
+		os.Unsetenv("HTTP_SERVICES_SERVER_PID_FILE")
 		os.Unsetenv("HTTP_SERVICES_SERVER_ENABLE_ACME")
 		os.Unsetenv("HTTP_SERVICES_SERVER_ACME_DOMAIN")
 		os.Unsetenv("HTTP_SERVICES_SERVER_ACME_CACHE_DIR")
@@ -155,6 +164,10 @@ func TestLoadConfigWithEnv(t *testing.T) {
 
 	if JWTExpiration != 24*time.Hour {
 		t.Errorf("JWTExpiration = %v, want 24h (from env)", JWTExpiration)
+	}
+
+	if PidFile != pidPath {
+		t.Errorf("PidFile = %s, want %s (from env)", PidFile, pidPath)
 	}
 
 	if !EnableACME {
