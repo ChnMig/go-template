@@ -28,6 +28,27 @@ func TestIssueID(t *testing.T) {
 	}
 }
 
+func TestIssueID_WhenFlakeNil(t *testing.T) {
+	oldFlake := flake
+	flake = nil
+	t.Cleanup(func() {
+		flake = oldFlake
+	})
+
+	id1 := IssueID()
+	if id1 == "" {
+		t.Fatal("IssueID returned empty string when flake is nil")
+	}
+
+	matched, err := regexp.MatchString(`^\d+$`, id1)
+	if err != nil {
+		t.Fatalf("Regex error: %v", err)
+	}
+	if !matched {
+		t.Errorf("IssueID should return numeric string when flake is nil, got: %s", id1)
+	}
+}
+
 func TestGenerateID(t *testing.T) {
 	// 测试生成唯一 ID
 	id1 := GenerateID()
