@@ -9,6 +9,7 @@ import (
 	"math/big"
 	"net/http"
 	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -180,4 +181,83 @@ func TestSetup_ReloadOnFileChange(t *testing.T) {
 	}
 
 	t.Fatalf("TLS 证书未在预期时间内完成热更新")
+}
+
+func TestSetup_IgnoresUnrelatedFileChangesInWatchedDir(t *testing.T) {
+	certPath, keyPath := createTestCertFiles(t)
+
+	config.EnableTLS = true
+	config.TLSCertFile = certPath
+	config.TLSKeyFile = keyPath
+
+	srv := &http.Server{Addr: ":0"}
+	ctx := Setup(srv)
+	if ctx == nil {
+		t.Fatalf("Setup() 返回 nil")
+	}
+	if !ctx.Enabled {
+		t.Fatalf("ctx.Enabled = false, want true when TLS enabled")
+	}
+
+	originalCert := getCurrentCertificate()
+	if originalCert == nil {
+		t.Fatalf("初始证书为空，期望已加载证书")
+	}
+
+	noisePath := filepath.Join(filepath.Dir(certPath), "tlsfile-noise.tmp")
+	t.Cleanup(func() { _ = os.Remove(noisePath) })
+
+	if err := os.WriteFile(noisePath, []byte("noise"), 0o600); err != nil {
+		t.Fatalf("write noise file failed: %v", err)
+	}
+
+	deadline := time.Now().Add(500 * time.Millisecond)
+	for time.Now().Before(deadline) {
+		updated := getCurrentCertificate()
+		if updated != nil && updated != originalCert {
+			t.Fatalf("unexpected cert reload on noise change")
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+}
+
+func TestSetup_ReloadOnFileRenameReplace(t *testing.T) {
+	certPath, keyPath := createTestCertFiles(t)
+
+	config.EnableTLS = true
+	config.TLSCertFile = certPath
+	config.TLSKeyFile = keyPath
+
+	srv := &http.Server{Addr: ":0"}
+	ctx := Setup(srv)
+	if ctx == nil {
+		t.Fatalf("Setup() 返回 nil")
+	}
+	if !ctx.Enabled {
+		t.Fatalf("ctx.Enabled = false, want true when TLS enabled")
+	}
+
+	originalCert := getCurrentCertificate()
+	if originalCert == nil {
+		t.Fatalf("初始证书为空，期望已加载证书")
+	}
+
+	newCertPath, newKeyPath := createTestCertFiles(t)
+	if err := os.Rename(newCertPath, certPath); err != nil {
+		t.Fatalf("rename replace cert failed: %v", err)
+	}
+	if err := os.Rename(newKeyPath, keyPath); err != nil {
+		t.Fatalf("rename replace key failed: %v", err)
+	}
+
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		updated := getCurrentCertificate()
+		if updated != nil && updated != originalCert {
+			return
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+
+	t.Fatalf("TLS 证书未在预期时间内完成热更新（rename replace）")
 }

@@ -114,14 +114,22 @@ func Setup(server *http.Server) *Context {
 		return ctx
 	}
 
-	paths := []string{certPath, keyPath}
-	for _, p := range paths {
-		if err := watcher.Add(p); err != nil {
-			zap.L().Error("监听 TLS 证书文件失败",
-				zap.String("path", p),
+	watchDirs := map[string]struct{}{
+		filepath.Dir(certPath): {},
+		filepath.Dir(keyPath):  {},
+	}
+	for dir := range watchDirs {
+		if err := watcher.Add(dir); err != nil {
+			zap.L().Error("监听 TLS 证书目录失败",
+				zap.String("dir", dir),
 				zap.Error(err),
 			)
 		}
+	}
+
+	watchFiles := map[string]struct{}{
+		certPath: {},
+		keyPath:  {},
 	}
 
 	go func() {
@@ -132,20 +140,25 @@ func Setup(server *http.Server) *Context {
 				if !ok {
 					return
 				}
+				if _, ok := watchFiles[event.Name]; !ok {
+					continue
+				}
 				// 证书或私钥文件发生写入/创建/重命名等变更时尝试重新加载
-				if event.Has(fsnotify.Write) || event.Has(fsnotify.Create) || event.Has(fsnotify.Rename) {
+				if event.Has(fsnotify.Write) || event.Has(fsnotify.Create) || event.Has(fsnotify.Rename) || event.Has(fsnotify.Remove) || event.Has(fsnotify.Chmod) {
 					// 简单的防抖处理，避免文件仍在写入过程中
 					time.Sleep(200 * time.Millisecond)
 					if err := loadCertificate(certPath, keyPath); err != nil {
 						zap.L().Error("重新加载 TLS 证书失败",
 							zap.String("cert_file", certPath),
 							zap.String("key_file", keyPath),
+							zap.String("event", event.String()),
 							zap.Error(err),
 						)
 					} else {
 						zap.L().Info("TLS 证书已重新加载",
 							zap.String("cert_file", certPath),
 							zap.String("key_file", keyPath),
+							zap.String("event", event.String()),
 						)
 					}
 				}
