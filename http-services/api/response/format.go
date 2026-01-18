@@ -10,9 +10,8 @@ import (
 	"go.uber.org/zap"
 )
 
-// getTraceID 从 context 中获取 trace_id
 func getTraceID(c *gin.Context) string {
-	if traceID, exists := c.Get("X-Request-ID"); exists {
+	if traceID, exists := c.Get("trace_id"); exists {
 		if id, ok := traceID.(string); ok {
 			return id
 		}

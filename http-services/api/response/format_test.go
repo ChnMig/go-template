@@ -175,9 +175,8 @@ func TestTraceIDInResponse(t *testing.T) {
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
 
-	// 模拟设置 Request ID
 	expectedTraceID := "test-trace-id-12345"
-	c.Set("X-Request-ID", expectedTraceID)
+	c.Set("trace_id", expectedTraceID)
 
 	testData := map[string]string{"message": "test"}
 	ReturnOk(c, testData)
@@ -199,9 +198,8 @@ func TestTraceIDInErrorResponse(t *testing.T) {
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
 
-	// 模拟设置 Request ID
 	expectedTraceID := "error-trace-id-67890"
-	c.Set("X-Request-ID", expectedTraceID)
+	c.Set("trace_id", expectedTraceID)
 
 	ReturnError(c, INVALID_ARGUMENT, "Test error")
 
