@@ -78,7 +78,7 @@ func Handler(c *gin.Context) {
 
 响应头中也会返回：
 ```
-X-Request-ID: abc123
+X-Trace-ID: abc123
 ```
 
 ---

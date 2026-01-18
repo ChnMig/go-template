@@ -414,7 +414,7 @@ stringData:
 - `status`: 状态名称（如 OK, INVALID_ARGUMENT）
 - `description`: 标准错误描述（符合 Google API 规范）
 - `message`: 具体的业务错误信息（可选）
-- `trace_id`: 请求追踪 ID（由网关或中间件注入 `X-Request-ID`）
+- `trace_id`: 请求追踪 ID（由网关或中间件注入 `X-Trace-ID`）
 - `timestamp`: 时间戳
 - `detail`: 详细数据（可选）
 - `total`: 分页总数（可选）
