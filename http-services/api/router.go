@@ -40,8 +40,7 @@ func InitApi() *gin.Engine {
 	// 2. 安全响应头 - 早期设置安全策略
 	router.Use(middleware.SecurityHeaders())
 
-	// 3. 请求 ID 追踪 - 用于日志关联
-	router.Use(middleware.RequestID())
+	router.Use(middleware.TraceID())
 
 	// 4. 取消 Prometheus 监控中间件（不需要 metrics）
 
