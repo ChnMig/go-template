@@ -24,6 +24,7 @@ config.yaml
 
 *.out
 
-.agentdocs/*.md
-.claude/*.md
-.claude/*.json
+# AI
+.claude/
+.sisyphus/
+.suco-auggie/
