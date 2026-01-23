@@ -8,6 +8,8 @@ GIT_COMMIT := $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
 # 构建参数
 LDFLAGS := -X main.Version=$(VERSION) -X main.BuildTime=$(BUILD_TIME) -X main.GitCommit=$(GIT_COMMIT)
 BINARY_NAME := http-services
+# 产物名称（可通过 make build BIN_NAME=xxx 覆盖）
+OUTPUT_NAME := $(if $(BIN_NAME),$(BIN_NAME),$(BINARY_NAME))
 
 # 跨平台构建矩阵与产物目录
 PLATFORMS ?= linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64
@@ -20,7 +22,7 @@ help: ## 显示帮助信息
 	@echo "可用命令:"
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-15s\033[0m %s\n", $$1, $$2}'
 
-build: ## 构建生产版本（CROSS=1 启用跨平台打包）
+build: ## 构建生产版本（CROSS=1 启用跨平台打包，BIN_NAME=xxx 指定二进制名称）
 	@if [ "$(CROSS)" = "1" ]; then \
 	  $(MAKE) build-cross; \
 	else \
@@ -28,10 +30,10 @@ build: ## 构建生产版本（CROSS=1 启用跨平台打包）
 	fi
 
 build-local: ## 本地构建（默认）
-	@echo "构建 $(BINARY_NAME)..."
+	@echo "构建 $(OUTPUT_NAME)..."
 	@mkdir -p bin
-	@go build -ldflags "$(LDFLAGS)" -o bin/$(BINARY_NAME) .
-	@echo "✓ 构建完成: bin/$(BINARY_NAME)"
+	@go build -ldflags "$(LDFLAGS)" -o bin/$(OUTPUT_NAME) .
+	@echo "✓ 构建完成: bin/$(OUTPUT_NAME)"
 
 build-cross: clean-dist ## 跨平台构建并打包到 dist/
 	@echo "开始跨平台构建与打包: $(PLATFORMS)"
@@ -40,18 +42,18 @@ build-cross: clean-dist ## 跨平台构建并打包到 dist/
 	for PLATFORM in $(PLATFORMS); do \
 	  OS=$${PLATFORM%/*}; ARCH=$${PLATFORM#*/}; \
 	  EXT=""; [ "$$OS" = "windows" ] && EXT=".exe"; \
-	  OUT_DIR="$(DIST_DIR)/$(BINARY_NAME)_$(VERSION)_$${OS}_$${ARCH}"; \
+	  OUT_DIR="$(DIST_DIR)/$(OUTPUT_NAME)_$(VERSION)_$${OS}_$${ARCH}"; \
 	  echo "- 构建 $$OS/$$ARCH"; \
 	  mkdir -p "$$OUT_DIR"; \
 	  GOOS=$$OS GOARCH=$$ARCH CGO_ENABLED=$(CGO_ENABLED) \
-	    go build -trimpath -ldflags "$(LDFLAGS) -s -w" -o "$$OUT_DIR/$(BINARY_NAME)$$EXT" .; \
+	    go build -trimpath -ldflags "$(LDFLAGS) -s -w" -o "$$OUT_DIR/$(OUTPUT_NAME)$$EXT" .; \
 	  for f in $(PACKAGE_FILES); do \
 	    [ -f "$$f" ] && cp "$$f" "$$OUT_DIR/" || true; \
 	  done; \
 	  if command -v zip >/dev/null 2>&1 && [ "$$OS" = "windows" ]; then \
-	    (cd "$(DIST_DIR)" && zip -q -r "$(BINARY_NAME)_$(VERSION)_$${OS}_$${ARCH}.zip" "$$(basename "$$OUT_DIR")"); \
+	    (cd "$(DIST_DIR)" && zip -q -r "$(OUTPUT_NAME)_$(VERSION)_$${OS}_$${ARCH}.zip" "$$(basename "$$OUT_DIR")"); \
 	  else \
-	    (cd "$(DIST_DIR)" && tar -czf "$(BINARY_NAME)_$(VERSION)_$${OS}_$${ARCH}.tar.gz" "$$(basename "$$OUT_DIR")"); \
+	    (cd "$(DIST_DIR)" && tar -czf "$(OUTPUT_NAME)_$(VERSION)_$${OS}_$${ARCH}.tar.gz" "$$(basename "$$OUT_DIR")"); \
 	  fi; \
 	  rm -rf "$$OUT_DIR"; \
 	done; \
@@ -59,16 +61,16 @@ build-cross: clean-dist ## 跨平台构建并打包到 dist/
 
 run: build-local ## 构建并运行（生产模式）
 	@echo "启动服务（生产模式）..."
-	@./bin/$(BINARY_NAME)
+	@./bin/$(OUTPUT_NAME)
 
 dev: build-local ## 构建并运行（开发模式）
 	@echo "启动服务（开发模式）..."
-	@./bin/$(BINARY_NAME) --dev
+	@./bin/$(OUTPUT_NAME) --dev
 
 clean: ## 清理构建文件
 	@echo "清理构建文件..."
 	@rm -rf bin/
-	@rm -f $(BINARY_NAME)
+	@rm -f $(OUTPUT_NAME)
 	@echo "✓ 清理完成"
 
 clean-dist: ## 清理打包产物（dist/）
