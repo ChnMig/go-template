@@ -57,9 +57,8 @@ var (
 	TLSKeyFile  string // 本地 TLS 私钥文件路径（支持相对路径）
 
 	// Log
-	LogMaxSize    int // 日志文件最大大小（MB）
-	LogMaxBackups int // 日志文件最大备份数
-	LogMaxAge     int // 日志文件最大保留天数
+	LogMaxSize int // 日志文件最大大小（MB）
+	LogMaxAge  int // 日志文件最大保留天数
 )
 
 // 分页配置

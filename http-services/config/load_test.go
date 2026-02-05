@@ -54,7 +54,6 @@ func TestSetDefaults(t *testing.T) {
 		{"pid file", "server.pid_file", "http-services.pid"},
 		{"jwt expiration", "jwt.expiration", "12h"},
 		{"log max size", "log.max_size", 50},
-		{"log max backups", "log.max_backups", 3},
 		{"enable rate limit", "server.enable_rate_limit", false},
 		{"enable acme", "server.enable_acme", false},
 		{"acme domain", "server.acme_domain", ""},

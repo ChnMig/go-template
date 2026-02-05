@@ -261,7 +261,6 @@ jwt:
 
 log:
   max_size: 50                    # 单个日志文件最大大小（MB）
-  max_backups: 3                  # 保留的旧日志文件最大数量
   max_age: 30                     # 保留旧日志文件的最大天数
 ```
 
@@ -329,7 +328,6 @@ export HTTP_SERVICES_SERVER_ENABLE_RATE_LIMIT=true
 
 # 覆盖日志配置
 export HTTP_SERVICES_LOG_MAX_SIZE=100
-export HTTP_SERVICES_LOG_MAX_BACKUPS=5
 export HTTP_SERVICES_LOG_MAX_AGE=60
 
 # 运行服务
@@ -585,12 +583,13 @@ username := data["username"].(string)
 
 ### 生产模式（默认）
 
-- 日志输出到文件 `log/http-services.log`
+- 业务日志输出到文件 `log/<程序名>.log`（例如：`log/http-services.log`）
+- Gin 框架日志输出到文件 `log/<程序名>.gin.log`（例如：`log/http-services.gin.log`）
 - JSON 格式，便于日志分析
 - Info 级别日志
 - 自动轮转（可通过配置文件或环境变量自定义）：
-  - 单文件最大大小：默认 50MB（可配置 `log.max_size`）
-  - 最多保留备份数：默认 3 个（可配置 `log.max_backups`）
+  - 按天切割：每天 00:00（本地时间）主动轮转
+  - 单文件最大大小兜底：默认 50MB（可配置 `log.max_size`），同一天写满会继续产生新文件（文件名带时间戳）
   - 保留天数：默认 30 天（可配置 `log.max_age`）
 
 ### 自定义日志配置
@@ -600,7 +599,6 @@ username := data["username"].(string)
 ```yaml
 log:
   max_size: 100      # 单个日志文件最大 100MB
-  max_backups: 5     # 保留 5 个备份文件
   max_age: 60        # 保留 60 天
 ```
 
@@ -608,7 +606,6 @@ log:
 
 ```bash
 export HTTP_SERVICES_LOG_MAX_SIZE=100
-export HTTP_SERVICES_LOG_MAX_BACKUPS=5
 export HTTP_SERVICES_LOG_MAX_AGE=60
 ```
 

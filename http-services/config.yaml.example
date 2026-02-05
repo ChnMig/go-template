@@ -52,5 +52,4 @@ jwt:
 
 log:
   max_size: 50      # 单个日志文件最大大小（MB）
-  max_backups: 3    # 保留的旧日志文件最大数量
   max_age: 30       # 保留旧日志文件的最大天数

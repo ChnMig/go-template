@@ -75,9 +75,8 @@ func setDefaults() {
 	v.SetDefault("jwt.expiration", "12h")
 
 	// Log 默认配置
-	v.SetDefault("log.max_size", 50)   // 50MB
-	v.SetDefault("log.max_backups", 3) // 保留 3 个备份
-	v.SetDefault("log.max_age", 30)    // 保留 30 天
+	v.SetDefault("log.max_size", 50) // 50MB
+	v.SetDefault("log.max_age", 30)  // 保留 30 天
 }
 
 // applyConfig 将 Viper 配置应用到全局变量
@@ -128,7 +127,6 @@ func applyConfig() error {
 
 	// Log 配置
 	LogMaxSize = v.GetInt("log.max_size")
-	LogMaxBackups = v.GetInt("log.max_backups")
 	LogMaxAge = v.GetInt("log.max_age")
 
 	return nil
