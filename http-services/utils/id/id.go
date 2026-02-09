@@ -38,6 +38,13 @@ func GenerateID() string {
 	return id
 }
 
+// GenerateNumericID 生成纯数字唯一 ID。
+//
+// 规则：yyMMdd + IssueID
+func GenerateNumericID() string {
+	return time.Now().Format("060102") + IssueID()
+}
+
 func init() {
 	flake = newSonyflake()
 }

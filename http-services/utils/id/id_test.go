@@ -77,6 +77,29 @@ func TestGenerateID(t *testing.T) {
 	}
 }
 
+func TestGenerateNumericID(t *testing.T) {
+	id1 := GenerateNumericID()
+	if id1 == "" {
+		t.Fatal("GenerateNumericID returned empty string")
+	}
+	if len(id1) <= 6 {
+		t.Fatalf("GenerateNumericID should include date prefix and body, got: %s", id1)
+	}
+
+	matched, err := regexp.MatchString(`^\d+$`, id1)
+	if err != nil {
+		t.Fatalf("Regex error: %v", err)
+	}
+	if !matched {
+		t.Errorf("GenerateNumericID should return numeric string, got: %s", id1)
+	}
+
+	id2 := GenerateNumericID()
+	if id1 == id2 {
+		t.Error("GenerateNumericID should generate unique IDs")
+	}
+}
+
 func TestIDUniqueness(t *testing.T) {
 	// 批量生成 ID 并检查唯一性
 	ids := make(map[string]bool)
