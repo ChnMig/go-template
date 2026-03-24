@@ -39,18 +39,18 @@ const BoundParamsKey = "__bound_params__"
 
 // Creating Dev logger
 // DEV mode outputs logs to the terminal and is more readable
-func createDevLogger() *zap.Logger {
+func createDevLogger(level zapcore.Level) *zap.Logger {
 	encoder := zap.NewDevelopmentEncoderConfig()
 	core := zapcore.NewTee(
 		zapcore.NewSamplerWithOptions(
-			zapcore.NewCore(zapcore.NewConsoleEncoder(encoder), os.Stdout, zap.DebugLevel), time.Second, 4, 1),
+			zapcore.NewCore(zapcore.NewConsoleEncoder(encoder), os.Stdout, level), time.Second, 4, 1),
 	)
 	return zap.New(core, zap.AddCaller())
 }
 
 // Creating product logger
 // The product pattern outputs logs to a file and is architecturally structured, in json format.
-func createProductLogger(fileName string) (*zap.Logger, *lumberjack.Logger) {
+func createProductLogger(fileName string, level zapcore.Level) (*zap.Logger, *lumberjack.Logger) {
 	fileEncoder := zap.NewProductionEncoderConfig()
 	fileEncoder.EncodeTime = zapcore.ISO8601TimeEncoder
 	lj := &lumberjack.Logger{
@@ -64,7 +64,7 @@ func createProductLogger(fileName string) (*zap.Logger, *lumberjack.Logger) {
 	fileWriter := zapcore.AddSync(lj)
 	core := zapcore.NewTee(
 		zapcore.NewSamplerWithOptions(
-			zapcore.NewCore(zapcore.NewJSONEncoder(fileEncoder), fileWriter, zap.InfoLevel), time.Second, 4, 1),
+			zapcore.NewCore(zapcore.NewJSONEncoder(fileEncoder), fileWriter, level), time.Second, 4, 1),
 	)
 	return zap.New(core, zap.AddCaller()), lj
 }
@@ -73,28 +73,33 @@ func createProductLogger(fileName string) (*zap.Logger, *lumberjack.Logger) {
 func SetLogger() {
 	mu.Lock()
 	defer mu.Unlock()
+	businessLevel := parseLogLevel(config.LogLevel)
+	ginLevel := businessLevel
+	if strings.TrimSpace(config.GinLogLevel) != "" {
+		ginLevel = parseLogLevel(config.GinLogLevel)
+	}
 
 	// Get log mode
 	switch {
 	case runmodel.IsDev():
-		logger = createDevLogger()
+		logger = createDevLogger(businessLevel)
 		loggerLJ = nil
 
-		ginLogger = createDevLogger().With(zap.String("logger", "gin"))
+		ginLogger = createDevLogger(ginLevel).With(zap.String("logger", "gin"))
 		ginErrorLogger = ginLogger.With(zap.String("stream", "stderr"))
 		ginLoggerLJ = nil
 	case runmodel.IsRelease():
-		logger, loggerLJ = createProductLogger(config.LogPath)
+		logger, loggerLJ = createProductLogger(config.LogPath, businessLevel)
 
-		ginLogger, ginLoggerLJ = createProductLogger(ginLogPath())
+		ginLogger, ginLoggerLJ = createProductLogger(ginLogPath(), ginLevel)
 		ginLogger = ginLogger.With(zap.String("logger", "gin"))
 		ginErrorLogger = ginLogger.With(zap.String("stream", "stderr"))
 	default:
 		// 默认视作开发模式，避免测试/包初始化阶段创建文件与目录
-		logger = createDevLogger()
+		logger = createDevLogger(businessLevel)
 		loggerLJ = nil
 
-		ginLogger = createDevLogger().With(zap.String("logger", "gin"))
+		ginLogger = createDevLogger(ginLevel).With(zap.String("logger", "gin"))
 		ginErrorLogger = ginLogger.With(zap.String("stream", "stderr"))
 		ginLoggerLJ = nil
 	}
@@ -432,4 +437,22 @@ func WithRequest(c *gin.Context) *zap.Logger {
 	}
 
 	return base.With(fields...)
+}
+
+func parseLogLevel(levelStr string) zapcore.Level {
+	switch strings.ToLower(strings.TrimSpace(levelStr)) {
+	case "debug":
+		return zap.DebugLevel
+	case "info":
+		return zap.InfoLevel
+	case "warn", "warning":
+		return zap.WarnLevel
+	case "error":
+		return zap.ErrorLevel
+	default:
+		zap.L().Warn("未识别的日志级别，使用默认 info 级别",
+			zap.String("input_level", levelStr),
+		)
+		return zap.InfoLevel
+	}
 }

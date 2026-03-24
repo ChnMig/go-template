@@ -81,6 +81,7 @@ func main() {
 
 	// 启动配置热重载（在日志初始化之后）
 	config.WatchConfig(func() {
+		log.SetLogger()
 		zap.L().Info("Configuration reloaded",
 			zap.Int("port", config.ListenPort),
 			zap.Duration("jwt_expiration", config.JWTExpiration),

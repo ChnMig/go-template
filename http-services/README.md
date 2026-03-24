@@ -262,6 +262,8 @@ jwt:
 log:
   max_size: 50                    # 单个日志文件最大大小（MB）
   max_age: 30                     # 保留旧日志文件的最大天数
+  level: "info"                  # 业务日志级别: debug, info, warn, error
+  gin_level: ""                  # Gin access/error 日志级别；为空时跟随 level
 ```
 
 ### 启用内置 ACME 自动 TLS
@@ -329,10 +331,27 @@ export HTTP_SERVICES_SERVER_ENABLE_RATE_LIMIT=true
 # 覆盖日志配置
 export HTTP_SERVICES_LOG_MAX_SIZE=100
 export HTTP_SERVICES_LOG_MAX_AGE=60
+export HTTP_SERVICES_LOG_LEVEL=warn
+export HTTP_SERVICES_LOG_GIN_LEVEL=info
 
 # 运行服务
 ./bin/http-services
 ```
+
+如果你希望业务日志和 Gin 日志分开控级，可以这样配置：
+
+```yaml
+log:
+  level: "warn"
+  gin_level: "info"
+```
+
+说明：
+
+- `log.level` 控制业务日志级别；
+- `log.gin_level` 控制 Gin access/error 日志级别；
+- 当 `log.gin_level` 为空时，Gin 日志默认跟随 `log.level`；
+- 配置热重载后，logger 会自动刷新，无需重启服务。
 
 **环境变量命名规则：**
 - 前缀：`HTTP_SERVICES_`

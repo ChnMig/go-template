@@ -53,3 +53,5 @@ jwt:
 log:
   max_size: 50      # 单个日志文件最大大小（MB）
   max_age: 30       # 保留旧日志文件的最大天数
+  level: "info"     # 业务日志级别: debug, info, warn, error
+  gin_level: ""     # Gin access/error 日志级别；为空时跟随 level

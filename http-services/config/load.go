@@ -77,6 +77,8 @@ func setDefaults() {
 	// Log 默认配置
 	v.SetDefault("log.max_size", 50) // 50MB
 	v.SetDefault("log.max_age", 30)  // 保留 30 天
+	v.SetDefault("log.level", "info")
+	v.SetDefault("log.gin_level", "")
 }
 
 // applyConfig 将 Viper 配置应用到全局变量
@@ -128,6 +130,8 @@ func applyConfig() error {
 	// Log 配置
 	LogMaxSize = v.GetInt("log.max_size")
 	LogMaxAge = v.GetInt("log.max_age")
+	LogLevel = v.GetString("log.level")
+	GinLogLevel = v.GetString("log.gin_level")
 
 	return nil
 }
