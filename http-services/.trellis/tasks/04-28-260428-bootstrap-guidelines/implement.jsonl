@@ -1,6 +1,0 @@
-{"file": ".trellis/spec/backend/index.md", "reason": "后端规范索引，确认本任务应遵循的规范范围"}
-{"file": ".trellis/spec/backend/directory-structure.md", "reason": "涉及 api/middleware、config、utils、main.go 和文档结构调整"}
-{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "涉及代码质量、测试、配置删除和验证命令"}
-{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "新增 recovery 和 access log 中间件，必须遵循日志字段与敏感信息约束"}
-{"file": ".trellis/spec/backend/error-handling.md", "reason": "panic recovery 必须走 api/response 统一错误响应"}
-{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "修改常量、工具函数和配置前需要搜索复用点与联动路径"}
