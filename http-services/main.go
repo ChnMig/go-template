@@ -14,8 +14,9 @@ import (
 	"http-services/config"
 	"http-services/utils/acme"
 	"http-services/utils/log"
-	pathtool "http-services/utils/path-tool"
+	"http-services/utils/pathtool"
 	"http-services/utils/pidfile"
+	"http-services/utils/runmodel"
 	"http-services/utils/tlsfile"
 
 	"github.com/alecthomas/kong"
@@ -56,20 +57,7 @@ func main() {
 	}
 
 	// 设置运行模式（必须在初始化日志之前）
-	if CLI.Dev {
-		config.RunModel = config.RunModelDevValue
-	} else {
-		// 从环境变量检测运行模式（如果没有指定 --dev）
-		model := os.Getenv(config.RunModelKey)
-		switch model {
-		case config.RunModelDevValue:
-			config.RunModel = config.RunModelDevValue
-		case config.RunModelRelease:
-			config.RunModel = config.RunModelRelease
-		default:
-			config.RunModel = config.RunModelRelease
-		}
-	}
+	runmodel.Detect(CLI.Dev)
 
 	// 初始化日志（在设置好 RunModel 之后）
 	// 仅在 release 模式创建日志目录，避免在测试/子包初始化时散落空 log 目录

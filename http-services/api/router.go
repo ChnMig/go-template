@@ -44,7 +44,7 @@ func InitApi() *gin.Engine {
 	router.Use(middleware.BodySizeLimit(config.MaxBodySize))
 
 	// 6. 跨域处理 - 在业务逻辑前处理
-	router.Use(middleware.CorssDomainHandler())
+	router.Use(middleware.CorsDomainHandler())
 
 	// 健康检查端点已移动到 openRouter（/api/v1/open/health）
 

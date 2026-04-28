@@ -23,6 +23,9 @@
 - 配置与运行：
   - Go 版本由 `go.mod` 管理，后端通过 `make build` / `make run` / `make dev` 进行构建与运行。
   - 配置使用 Viper 管理，配置文件为 `config.yaml`，支持环境变量覆盖与热重载。
+  - 运行模式判断统一走 `utils/runmodel`，命令行 `--dev` 优先于环境变量 `model`。
+  - 路径工具统一放在 `utils/pathtool`，避免继续使用短横线目录命名。
+  - CORS 中间件使用 `CorsDomainHandler`，脚手架默认纯放开跨域；生产项目如需收紧，应在项目内替换中间件策略。
 - 测试与验证（Go 后端）：
   - 代码变更后应通过 `make fmt` 进行格式化。
   - 使用 `make test` 运行单元测试并检查覆盖率。

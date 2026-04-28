@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"http-services/config"
-	pathtool "http-services/utils/path-tool"
+	"http-services/utils/pathtool"
 
 	"github.com/fsnotify/fsnotify"
 	"go.uber.org/zap"

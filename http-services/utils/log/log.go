@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"http-services/config"
-	runmodel "http-services/utils/run-model"
+	"http-services/utils/runmodel"
 
 	"github.com/fsnotify/fsnotify"
 	"github.com/gin-gonic/gin"

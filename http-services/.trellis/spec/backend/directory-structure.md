@@ -97,7 +97,7 @@ func GetStatus() (Status, error) {
 - 路由注册函数使用 `RegisterRoutes`、`RegisterOpenRoutes`、`RegisterPrivateRoutes`。
 - DTO 与领域对象分开命名，例如 `api/app/v1/open/health/dto.go` 中的 `StatusDTO` 不直接复用 `domain/health/status.go` 的 `Status`。
 - 测试文件使用 `*_test.go`，测试函数使用 `TestXxx`。
-- 包含短横线的目录已存在于 `utils/path-tool`，新增目录优先使用 Go 常见的小写短名；除非已有调用约定，不继续扩大短横线目录风格。
+- `utils/` 下目录使用 Go 常见的小写短名，不使用短横线；例如 `utils/pathtool`、`utils/runmodel`。
 
 ---
 

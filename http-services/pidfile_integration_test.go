@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -28,11 +29,12 @@ func TestPidFileLifecycle(t *testing.T) {
 	}
 
 	pidPath := filepath.Join(tmpDir, "http-services.pid")
+	port := reserveLocalPort(t)
 
 	cmd := exec.Command(binPath, "--dev")
 	cmd.Dir = tmpDir
 	cmd.Env = append(os.Environ(),
-		"HTTP_SERVICES_SERVER_PORT=0",
+		"HTTP_SERVICES_SERVER_PORT="+port,
 		"HTTP_SERVICES_SERVER_SHUTDOWN_TIMEOUT=1s",
 		"HTTP_SERVICES_JWT_KEY=0123456789abcdef0123456789abcdef",
 	)
@@ -95,4 +97,20 @@ func TestPidFileLifecycle(t *testing.T) {
 	if _, err := os.Stat(pidPath); !os.IsNotExist(err) {
 		t.Fatalf("服务退出后 pid 文件应被删除，Stat() err=%v", err)
 	}
+}
+
+func reserveLocalPort(t *testing.T) string {
+	t.Helper()
+
+	l, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Skipf("当前环境无法分配本地监听端口，跳过进程生命周期集成测试: %v", err)
+	}
+	defer l.Close()
+
+	addr, ok := l.Addr().(*net.TCPAddr)
+	if !ok {
+		t.Fatalf("监听地址类型 = %T，期望 *net.TCPAddr", l.Addr())
+	}
+	return strconv.Itoa(addr.Port)
 }

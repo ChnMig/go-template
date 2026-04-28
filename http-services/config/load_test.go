@@ -124,6 +124,7 @@ func TestApplyConfig(t *testing.T) {
 	if TLSKeyFile != "" {
 		t.Errorf("TLSKeyFile = %s, want empty", TLSKeyFile)
 	}
+
 }
 
 func TestLoadConfigWithEnv(t *testing.T) {
@@ -192,6 +193,7 @@ func TestLoadConfigWithEnv(t *testing.T) {
 	if TLSKeyFile != "/tmp/server.key" {
 		t.Errorf("TLSKeyFile = %s, want /tmp/server.key (from env)", TLSKeyFile)
 	}
+
 }
 
 func TestGetViper(t *testing.T) {

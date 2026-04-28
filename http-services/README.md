@@ -35,26 +35,26 @@ http-services/
 │   │   ├── code.go           # 状态码定义
 │   │   └── format.go         # 响应格式化
 │   └── router.go          # 路由配置
-├── common/               # 跨服务共享代码（常量、跨模块 DTO、公共逻辑）
 ├── domain/               # 领域模型与领域服务（核心业务规则）
-├── services/             # 长期运行服务（如 cron、异步任务调度）
 ├── config/                # 配置管理
 │   ├── config.go          # 配置变量定义
 │   ├── load.go            # 配置加载
 │   └── check.go           # 配置校验
-├── db/                   # 数据库迁移、初始化脚本
 ├── utils/                 # 工具函数
+│   ├── acme/              # ACME 自动 TLS
 │   ├── authentication/    # JWT 认证工具
 │   ├── encryption/        # 加密工具（BCrypt）
 │   ├── id/               # ID 生成器（Sonyflake）
 │   ├── log/              # 日志管理
-│   ├── path-tool/        # 路径工具
-│   └── run-model/        # 运行模式检测
+│   ├── pathtool/         # 路径工具
+│   ├── pidfile/          # pid 文件管理
+│   ├── random/           # 随机字符串
+│   ├── runmodel/         # 运行模式检测
+│   └── tlsfile/          # 本地证书文件 TLS 热更新
 ├── log/                   # 日志文件目录
 ├── static/               # 静态资源目录
 ├── bin/                  # 构建输出目录
 ├── dist/                 # 跨平台打包产物（make build-cross）
-├── vendor/               # Go Modules 依赖镜像（vendor 模式）
 ├── config.yaml           # 配置文件（不提交到 Git）
 ├── config.yaml.example   # 配置文件示例
 ├── main.go               # 程序入口
@@ -157,6 +157,10 @@ func ReturnDomainError(c *gin.Context, err error) {
 ```
 
 handler 中在拿到领域错误后，只需要调用 `ReturnDomainError(c, err)` 即可，既保证了错误码统一，又不会把领域层实现细节泄露到接口层。
+
+### 统一响应 HTTP 状态策略
+
+当前脚手架的 `api/response` 统一使用 HTTP 200 返回 JSON，业务成功或失败由响应体中的 `code` 与 `status` 表达。例如鉴权失败会返回 `{"code":401,"status":"UNAUTHENTICATED"}`，但 HTTP status 仍为 200。这样做便于某些前端网关统一解析业务错误；如果你的项目需要 REST 风格 HTTP status，应在项目初始化阶段统一调整 `api/response` 与相关测试，不要在单个 handler 中混用两套策略。
 
 ## 快速开始
 

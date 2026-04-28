@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 
 	"http-services/config"
-	pathtool "http-services/utils/path-tool"
+	"http-services/utils/pathtool"
 
 	"go.uber.org/zap"
 	"golang.org/x/crypto/acme/autocert"
