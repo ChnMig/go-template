@@ -27,6 +27,7 @@
   - 代码变更后应通过 `make fmt` 进行格式化。
   - 使用 `make test` 运行单元测试并检查覆盖率。
   - 如需静态检查，可执行 `make lint`。
+  - 进程生命周期类集成测试应支持 `testing.Short()` 跳过；等待 pid 文件、端口或外部进程就绪时要预留足够时间，并同步检测子进程提前退出以输出诊断信息。
 - TLS / ACME 相关约定：
   - HTTP 服务内置可选的 ACME 自动 TLS 能力，通过 `server.enable_acme` 开关与 `server.acme_domain` 配置启用。
   - 启用 ACME 后，服务会在 `server.port`（推荐 443）上以 HTTPS 形式提供服务，并在 80 端口开启仅供 ACME 验证与 HTTP→HTTPS 跳转的辅助 HTTP 服务。

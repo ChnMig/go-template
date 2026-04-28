@@ -44,15 +44,18 @@ func TestPidFileLifecycle(t *testing.T) {
 	if err := cmd.Start(); err != nil {
 		t.Fatalf("启动服务失败: %v", err)
 	}
+	waitCh := make(chan error, 1)
+	go func() { waitCh <- cmd.Wait() }()
+
 	t.Cleanup(func() {
 		if cmd.Process != nil && cmd.ProcessState == nil {
 			_ = cmd.Process.Kill()
-			_ = cmd.Wait()
+			_ = <-waitCh
 		}
 	})
 
 	wantPID := strconv.Itoa(cmd.Process.Pid)
-	deadline := time.Now().Add(2 * time.Second)
+	deadline := time.Now().Add(10 * time.Second)
 	for {
 		data, err := os.ReadFile(pidPath)
 		if err == nil {
@@ -60,6 +63,12 @@ func TestPidFileLifecycle(t *testing.T) {
 			if gotPID == wantPID {
 				break
 			}
+		}
+
+		select {
+		case err := <-waitCh:
+			t.Fatalf("服务在写入 pid 文件前退出: %v\nwant=%s，当前输出：\n%s", err, wantPID, out.String())
+		default:
 		}
 
 		if time.Now().After(deadline) {
@@ -71,9 +80,6 @@ func TestPidFileLifecycle(t *testing.T) {
 	if err := cmd.Process.Signal(os.Interrupt); err != nil {
 		t.Fatalf("发送中断信号失败: %v", err)
 	}
-
-	waitCh := make(chan error, 1)
-	go func() { waitCh <- cmd.Wait() }()
 
 	select {
 	case err := <-waitCh:
