@@ -25,7 +25,7 @@
 │           ├── open/               # 公开接口分组
 │           └── private/            # 私有接口分组
 ├── domain/                         # 领域模型、领域服务、领域错误
-├── utils/                          # 日志、JWT、ID、随机数、TLS/ACME、pidfile 等通用工具
+├── utils/                          # 日志、JWT、ID、随机数、Gin context key、pidfile 等通用工具
 └── *_test.go                       # 测试与被测代码同包或同目录放置
 ```
 

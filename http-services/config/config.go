@@ -46,16 +46,6 @@ var (
 	GlobalRateBurst int           // 全局限流突发容量
 	PidFile         string        // pid 文件路径（支持相对路径，相对 AbsPath）
 
-	// TLS / ACME
-	EnableACME   bool   // 是否启用 ACME 自动签发 TLS 证书
-	ACMEDomain   string // ACME 证书绑定的域名
-	ACMECacheDir string // ACME 证书缓存目录（可为相对路径）
-
-	// TLS 证书文件模式
-	EnableTLS   bool   // 是否启用本地证书文件 TLS 模式
-	TLSCertFile string // 本地 TLS 证书文件路径（支持相对路径）
-	TLSKeyFile  string // 本地 TLS 私钥文件路径（支持相对路径）
-
 	// Log
 	LogMaxSize  int
 	LogMaxAge   int

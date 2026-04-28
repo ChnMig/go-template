@@ -12,12 +12,10 @@ import (
 	"http-services/api"
 	"http-services/api/middleware"
 	"http-services/config"
-	"http-services/utils/acme"
 	"http-services/utils/log"
 	"http-services/utils/pathtool"
 	"http-services/utils/pidfile"
 	"http-services/utils/runmodel"
-	"http-services/utils/tlsfile"
 
 	"github.com/alecthomas/kong"
 	"go.uber.org/zap"
@@ -103,10 +101,6 @@ func main() {
 		MaxHeaderBytes: config.MaxHeaderBytes,
 	}
 
-	// 根据配置为服务挂载可选的 TLS 能力（ACME 或本地证书文件）
-	acmeCtx := acme.Setup(srv)
-	tlsFileCtx := tlsfile.Setup(srv)
-
 	// 监听停止信号（尽早注册，避免启动阶段收到信号时错过清理流程）
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGTERM, syscall.SIGINT)
@@ -127,29 +121,10 @@ func main() {
 		)
 	}
 
-	// 在 goroutine 中启动服务器
-	if acmeCtx.Enabled && acmeCtx.HTTPServer != nil {
-		// 启动 ACME HTTP 挑战服务器（80 端口）
-		go func() {
-			zap.L().Info("ACME HTTP 挑战服务器启动", zap.String("addr", acmeCtx.HTTPServer.Addr))
-			if err := acmeCtx.HTTPServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-				zap.L().Error("ACME HTTP 挑战服务器异常退出", zap.Error(err))
-			}
-		}()
-	}
-
 	serverErrCh := make(chan error, 1)
 	go func() {
-		var err error
-		if acmeCtx.Enabled || tlsFileCtx.Enabled {
-			zap.L().Info("Server is starting with TLS...",
-				zap.String("addr", srv.Addr),
-			)
-			err = srv.ListenAndServeTLS("", "")
-		} else {
-			zap.L().Info("Server is starting...")
-			err = srv.ListenAndServe()
-		}
+		zap.L().Info("Server is starting...")
+		err := srv.ListenAndServe()
 
 		if err != nil && err != http.ErrServerClosed {
 			serverErrCh <- err
@@ -176,15 +151,6 @@ func main() {
 			zap.L().Error("Server forced to shutdown", zap.Error(err))
 		}
 		// 即使服务器强制关闭，也要尝试清理资源
-	}
-
-	// 关闭 ACME HTTP 挑战服务器
-	if acmeCtx.Enabled && acmeCtx.HTTPServer != nil {
-		if err := acmeCtx.HTTPServer.Shutdown(shutdownCtx); err != nil {
-			if !errors.Is(err, http.ErrServerClosed) {
-				zap.L().Error("ACME HTTP 挑战服务器关闭失败", zap.Error(err))
-			}
-		}
 	}
 
 	// 清理资源

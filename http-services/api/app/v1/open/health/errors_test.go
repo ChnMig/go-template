@@ -9,6 +9,7 @@ import (
 
 	"http-services/api/response"
 	domain "http-services/domain/health"
+	"http-services/utils/contextkey"
 
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
@@ -120,7 +121,7 @@ func TestReturnDomainError_Logging(t *testing.T) {
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
 	// 在 gin.Context 中注入 logger，模拟中间件行为
-	c.Set("logger", logger)
+	c.Set(contextkey.Logger, logger)
 
 	testErr := errors.New("domain error")
 	ReturnDomainError(c, testErr)

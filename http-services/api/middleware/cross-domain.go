@@ -19,7 +19,6 @@ func CorsDomainHandler() gin.HandlerFunc {
 			c.Header("Access-Control-Expose-Headers", "*")
 			c.Header("Access-Control-Max-Age", "172800")
 			c.Header("Access-Control-Allow-Credentials", "false")
-			c.Set("content-type", "application/json")
 		}
 
 		if method == http.MethodOptions {

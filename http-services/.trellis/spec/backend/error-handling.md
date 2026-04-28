@@ -12,7 +12,7 @@
 2. `api/app/...` 将领域错误映射为统一响应码、业务码和用户可见文案。
 3. `api/response` 负责统一 JSON 响应格式，并始终通过 HTTP 200 返回业务结果。
 
-返回客户端的响应结构包含 `code`、`status`、`description`、可选 `message`、`trace_id`、`timestamp`、`detail`、`total`。`trace_id` 由 `api/middleware/trace-id.go` 写入 Gin context，响应函数自动带出。
+返回客户端的响应结构包含 `code`、`status`、`description`、可选 `message`、`trace_id`、`timestamp`、`detail`、`total`。`trace_id` 由 `api/middleware/trace-id.go` 写入 Gin context，context key 统一来自 `utils/contextkey`，响应函数自动带出。
 
 ---
 

@@ -5,6 +5,7 @@ import (
 
 	"http-services/api/response"
 	"http-services/utils/authentication"
+	"http-services/utils/contextkey"
 )
 
 const AuthorizationHeader = "Authorization"
@@ -22,6 +23,6 @@ func TokenVerify(c *gin.Context) {
 		return
 	}
 	// 将 JWT 数据设置到 gin.Context 中
-	c.Set("jwtData", jwtData)
+	c.Set(contextkey.JWTData, jwtData)
 	c.Next()
 }

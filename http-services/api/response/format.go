@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"time"
 
+	"http-services/utils/contextkey"
 	"http-services/utils/log"
 
 	"github.com/gin-gonic/gin"
@@ -11,7 +12,7 @@ import (
 )
 
 func getTraceID(c *gin.Context) string {
-	if traceID, exists := c.Get("trace_id"); exists {
+	if traceID, exists := c.Get(contextkey.TraceID); exists {
 		if id, ok := traceID.(string); ok {
 			return id
 		}

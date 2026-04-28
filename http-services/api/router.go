@@ -21,22 +21,24 @@ func InitApi() *gin.Engine {
 	gin.DefaultWriter = ginLogWriter
 	gin.DefaultErrorWriter = ginErrorWriter
 
-	// gin.Default uses Use by default. Two global middlewares are added, Logger(), Recovery(), Logger is to print logs, Recovery is panic and returns 500
 	gin.SetMode(gin.ReleaseMode)
-	router := gin.Default()
+	router := gin.New()
 	// https://pkg.go.dev/github.com/gin-gonic/gin#readme-don-t-trust-all-proxies
 	router.SetTrustedProxies(nil)
 
-	// 全局中间件（按推荐顺序：限流 → 安全 → 请求ID → 监控 → 跨域）
-	// 1. 全局限流（如果启用）- 最先执行，防止恶意请求消耗资源
+	// 全局中间件：先注入 trace_id，再让 access log 包住 recovery。
+	// handler panic 时 Recovery 先写统一响应，AccessLog 的 defer 再记录最终状态。
+	router.Use(middleware.TraceID())
+	router.Use(middleware.AccessLog())
+	router.Use(middleware.Recovery())
+
+	// 1. 全局限流（如果启用）
 	if config.EnableRateLimit {
 		router.Use(middleware.IPRateLimit(config.GlobalRateLimit, config.GlobalRateBurst))
 	}
 
-	// 2. 安全响应头 - 早期设置安全策略
+	// 2. 安全响应头
 	router.Use(middleware.SecurityHeaders())
-
-	router.Use(middleware.TraceID())
 
 	// 4. 取消 Prometheus 监控中间件（不需要 metrics）
 

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"http-services/config"
+	"http-services/utils/contextkey"
 	"http-services/utils/runmodel"
 
 	"github.com/fsnotify/fsnotify"
@@ -32,10 +33,6 @@ var (
 	monitorDone chan struct{} // 用于停止监控 goroutine
 	rotateDone  chan struct{} // 用于停止按天 Rotate goroutine
 )
-
-// BoundParamsKey 用于在 gin.Context 中存放已绑定的业务参数。
-// 目前由 middleware.CheckParam 进行写入，WithRequest 进行读取，仅用于日志记录。
-const BoundParamsKey = "__bound_params__"
 
 // Creating Dev logger
 // DEV mode outputs logs to the terminal and is more readable
@@ -369,7 +366,7 @@ func isManagedLogPath(path string) bool {
 //	}
 func FromContext(c *gin.Context) *zap.Logger {
 	// 尝试从 context 获取 logger
-	if loggerVal, exists := c.Get("logger"); exists {
+	if loggerVal, exists := c.Get(contextkey.Logger); exists {
 		if contextLogger, ok := loggerVal.(*zap.Logger); ok {
 			return contextLogger
 		}
@@ -432,7 +429,7 @@ func WithRequest(c *gin.Context) *zap.Logger {
 	}
 
 	// 已绑定的业务参数（例如通过 middleware.CheckParam 绑定的 JSON / 表单参数）
-	if bound, exists := c.Get(BoundParamsKey); exists && bound != nil {
+	if bound, exists := c.Get(contextkey.BoundParams); exists && bound != nil {
 		fields = append(fields, zap.Any("params", bound))
 	}
 

@@ -5,6 +5,8 @@ import (
 	"testing"
 	"time"
 
+	"http-services/utils/contextkey"
+
 	"github.com/gin-gonic/gin"
 )
 
@@ -67,7 +69,7 @@ func TestTokenRateLimit(t *testing.T) {
 	router.Use(TokenRateLimit(1, 2)) // 每秒1个请求，突发2个
 	router.GET("/test", func(c *gin.Context) {
 		// 模拟 JWT 中间件设置的数据
-		c.Set("jwtData", map[string]interface{}{"user_id": "user123"})
+		c.Set(contextkey.JWTData, map[string]interface{}{"user_id": "user123"})
 		c.JSON(200, gin.H{"message": "ok"})
 	})
 

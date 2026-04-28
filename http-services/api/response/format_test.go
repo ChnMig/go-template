@@ -5,6 +5,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"http-services/utils/contextkey"
+
 	"github.com/gin-gonic/gin"
 )
 
@@ -176,7 +178,7 @@ func TestTraceIDInResponse(t *testing.T) {
 	c, _ := gin.CreateTestContext(w)
 
 	expectedTraceID := "test-trace-id-12345"
-	c.Set("trace_id", expectedTraceID)
+	c.Set(contextkey.TraceID, expectedTraceID)
 
 	testData := map[string]string{"message": "test"}
 	ReturnOk(c, testData)
@@ -199,7 +201,7 @@ func TestTraceIDInErrorResponse(t *testing.T) {
 	c, _ := gin.CreateTestContext(w)
 
 	expectedTraceID := "error-trace-id-67890"
-	c.Set("trace_id", expectedTraceID)
+	c.Set(contextkey.TraceID, expectedTraceID)
 
 	ReturnError(c, INVALID_ARGUMENT, "Test error")
 

@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"http-services/utils/contextkey"
 	"http-services/utils/id"
 
 	"github.com/gin-gonic/gin"
@@ -8,8 +9,8 @@ import (
 )
 
 const (
-	TraceIDHeaderKey  = "X-Trace-ID"
-	TraceIDContextKey = "trace_id"
+	TraceIDHeaderKey  = contextkey.TraceIDHeader
+	TraceIDContextKey = contextkey.TraceID
 )
 
 func TraceID() gin.HandlerFunc {
@@ -29,7 +30,7 @@ func TraceID() gin.HandlerFunc {
 			zap.String("path", c.Request.URL.Path),
 			zap.String("client_ip", c.ClientIP()),
 		)
-		c.Set("logger", contextLogger)
+		c.Set(contextkey.Logger, contextLogger)
 
 		// 记录请求开始（调试级别）
 		contextLogger.Debug("Request started")

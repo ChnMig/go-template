@@ -64,12 +64,6 @@ func setDefaults() {
 	v.SetDefault("server.global_rate_limit", 100)
 	v.SetDefault("server.global_rate_burst", 200)
 	v.SetDefault("server.pid_file", "http-services.pid")
-	v.SetDefault("server.enable_acme", false)
-	v.SetDefault("server.acme_domain", "")
-	v.SetDefault("server.acme_cache_dir", "acme-cert-cache")
-	v.SetDefault("server.enable_tls", false)
-	v.SetDefault("server.tls_cert_file", "")
-	v.SetDefault("server.tls_key_file", "")
 
 	// JWT 默认配置
 	v.SetDefault("jwt.expiration", "12h")
@@ -112,16 +106,6 @@ func applyConfig() error {
 	if PidFile != "" && !filepath.IsAbs(PidFile) {
 		PidFile = filepath.Join(AbsPath, PidFile)
 	}
-
-	// TLS / ACME 配置
-	EnableACME = v.GetBool("server.enable_acme")
-	ACMEDomain = v.GetString("server.acme_domain")
-	ACMECacheDir = v.GetString("server.acme_cache_dir")
-
-	// TLS 证书文件模式配置
-	EnableTLS = v.GetBool("server.enable_tls")
-	TLSCertFile = v.GetString("server.tls_cert_file")
-	TLSKeyFile = v.GetString("server.tls_key_file")
 
 	// JWT 配置
 	JWTKey = v.GetString("jwt.key")

@@ -9,6 +9,7 @@ import (
 	"golang.org/x/time/rate"
 
 	"http-services/api/response"
+	"http-services/utils/contextkey"
 )
 
 // limiterEntry 限流器条目，包含限流器和最后访问时间
@@ -332,7 +333,7 @@ func RateLimitWithOptions(opts RateLimitOptions) gin.HandlerFunc {
 // getTokenKey 从 context 中提取 token key
 func getTokenKey(c *gin.Context) string {
 	// 从 context 中获取 JWT 数据（需要在 TokenVerify 中间件之后使用）
-	jwtData, exists := c.Get("jwtData")
+	jwtData, exists := c.Get(contextkey.JWTData)
 	if !exists {
 		// 如果没有 JWT 数据，使用 IP 作为 key
 		return c.ClientIP()

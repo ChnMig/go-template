@@ -7,6 +7,7 @@ import (
 
 	"http-services/config"
 	"http-services/utils/authentication"
+	"http-services/utils/contextkey"
 
 	"github.com/gin-gonic/gin"
 )
@@ -29,7 +30,7 @@ func TestTokenVerify_ValidToken(t *testing.T) {
 	router := gin.New()
 	router.Use(TokenVerify)
 	router.GET("/test", func(c *gin.Context) {
-		jwtData, exists := c.Get("jwtData")
+		jwtData, exists := c.Get(contextkey.JWTData)
 		if !exists {
 			t.Error("jwtData not found in context")
 		}

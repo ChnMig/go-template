@@ -26,11 +26,13 @@ http-services/
 │   │       └── open/
 │   │           └── health/    # 健康检查模块（开放）
 │   ├── middleware/        # 中间件
+│   │   ├── access-log.go     # 结构化访问日志
 │   │   ├── cross-domain.go   # 跨域处理
 │   │   ├── jwt.go            # JWT 验证
 │   │   ├── page.go           # 分页处理
 │   │   ├── params.go         # 参数验证
-│   │   └── rate-limit.go     # 限流中间件
+│   │   ├── rate-limit.go     # 限流中间件
+│   │   └── recovery.go       # 统一 panic recovery
 │   ├── response/          # 响应处理
 │   │   ├── code.go           # 状态码定义
 │   │   └── format.go         # 响应格式化
@@ -41,16 +43,15 @@ http-services/
 │   ├── load.go            # 配置加载
 │   └── check.go           # 配置校验
 ├── utils/                 # 工具函数
-│   ├── acme/              # ACME 自动 TLS
 │   ├── authentication/    # JWT 认证工具
+│   ├── contextkey/        # Gin context key 常量
 │   ├── encryption/        # 加密工具（BCrypt）
 │   ├── id/               # ID 生成器（Sonyflake）
 │   ├── log/              # 日志管理
 │   ├── pathtool/         # 路径工具
 │   ├── pidfile/          # pid 文件管理
 │   ├── random/           # 随机字符串
-│   ├── runmodel/         # 运行模式检测
-│   └── tlsfile/          # 本地证书文件 TLS 热更新
+│   └── runmodel/         # 运行模式检测
 ├── log/                   # 日志文件目录
 ├── static/               # 静态资源目录
 ├── bin/                  # 构建输出目录
@@ -243,12 +244,7 @@ make run
 ```yaml
 server:
   port: 8080                      # 服务监听端口
-  enable_acme: false              # 是否启用 ACME 自动 TLS（默认关闭）
-  acme_domain: ""                 # ACME 证书绑定域名（启用 ACME 时必填）
-  acme_cache_dir: "acme-cert-cache"  # ACME 证书缓存目录，相对路径基于程序所在目录
-  enable_tls: false               # 是否启用本地证书文件 TLS 模式（默认关闭，与 ACME 互斥）
-  tls_cert_file: ""               # 本地 TLS 证书文件路径（支持相对路径）
-  tls_key_file: ""                # 本地 TLS 私钥文件路径（支持相对路径）
+  pid_file: "http-services.pid"   # pid 文件路径（支持相对路径）
   max_body_size: "10MB"           # 最大请求体大小
   max_header_bytes: 1048576       # 最大请求头大小（字节）
   shutdown_timeout: "10s"         # 优雅关闭超时时间
@@ -270,50 +266,9 @@ log:
   gin_level: ""                  # Gin access/error 日志级别；为空时跟随 level
 ```
 
-### 启用内置 ACME 自动 TLS
+### HTTPS/TLS 部署
 
-项目内置基于 ACME 协议（例如 Let's Encrypt）的自动证书签发与续期能力，可通过配置一键开启：
-
-```yaml
-server:
-  port: 443
-  enable_acme: true
-  acme_domain: "api.example.com"
-  acme_cache_dir: "acme-cert-cache"
-  # 其他 server 配置略
-```
-
-使用说明：
-- 确保 `acme_domain` 已解析到当前服务所在机器的公网 IP；
-- 确保 80 与 443 端口可被公网访问（ACME HTTP-01 与 TLS-ALPN-01 验证需要）；
-- 启用后服务会：
-  - 在 `server.port`（建议 443）上以 HTTPS 形式对外提供服务；
-  - 在 80 端口开启仅用于 ACME 验证与 HTTP->HTTPS 跳转的辅助 HTTP 服务；
-  - 自动在 `acme_cache_dir` 目录下缓存证书与密钥文件。
-- 内置 ACME 更适合“单机单入口服务”的部署场景：同一台机器、同一公网 IP 上应只由一个进程实际监听 80/443 并负责证书签发；如果有多个基于本模板的服务，请仅为对外暴露的入口服务开启 `enable_acme`，其他服务保持关闭，由入口层做反向代理。
-
-如仍使用 Nginx / Caddy / Traefik / Kubernetes Ingress 等在 80/443 上对外暴露 HTTPS，也可以保持 `enable_acme: false`，由这些网关层统一管理证书。
-
-### 启用本地证书文件 TLS 模式
-
-除了 ACME 自动签发模式外，项目还支持直接使用本地证书与私钥文件提供 TLS 能力，并在证书文件发生变化时自动热更新：
-
-```yaml
-server:
-  port: 443
-  enable_acme: false
-  enable_tls: true
-  tls_cert_file: "certs/server.crt"
-  tls_key_file: "certs/server.key"
-  # 其他 server 配置略
-```
-
-说明：
-- `tls_cert_file` 与 `tls_key_file` 支持相对路径，相对基准为程序所在目录（`config.AbsPath`）；
-- 启动时会先加载一次证书，加载失败会直接退出；
-- 运行期间会使用 `fsnotify` 监听证书与私钥文件，当文件被覆盖、重命名或写入时，会自动重新加载证书并应用到后续 TLS 握手；
-- `enable_acme` 与 `enable_tls` 不能同时为 `true`，否则会在启动配置校验阶段直接报错。
-```
+服务进程只提供 HTTP，不内置 ACME 自动证书签发或本地证书文件 TLS 热更新。生产环境建议在 Caddy、Nginx、Traefik、Kubernetes Ingress 或云负载均衡层终止 HTTPS，再将流量反向代理到本服务监听端口。
 
 ### 环境变量覆盖
 
@@ -514,9 +469,13 @@ middleware.RateLimitWithOptions(middleware.RateLimitOptions{
 // 获取分页参数
 page := middleware.GetPage(c)      // 默认 1
 pageSize := middleware.GetPageSize(c)  // 默认 20
+pageQuery := middleware.ParsePageQuery(c)
+if pageQuery.IsDisabled() {
+    // page=-1 或 page_size=-1 表示取消分页
+}
 
 // 取消分页（获取全部数据）
-// 请求参数：page=-1 或 pageSize=-1
+// 请求参数：page=-1 或 page_size=-1
 ```
 
 ### 4. 路由组织（分层）
@@ -524,7 +483,8 @@ pageSize := middleware.GetPageSize(c)  // 默认 20
 ```go
 // 顶层：api/router.go（仅初始化与挂载 /api，业务路由下沉到 app 层）
 func InitApi() *gin.Engine {
-    router := gin.Default()
+    router := gin.New()
+    router.Use(middleware.TraceID(), middleware.AccessLog(), middleware.Recovery())
     // ... 全局中间件
     apiGroup := router.Group("/api")
     app.RegisterRoutes(apiGroup)
@@ -557,6 +517,8 @@ func RegisterRoutes(open *gin.RouterGroup) {
 JWT 使用 `map[string]interface{}` 存储自定义数据，支持灵活的数据结构。
 
 ```go
+import "http-services/utils/contextkey"
+
 // 签发 Token - 使用 map 存储任意数据结构
 userData := map[string]interface{}{
     "user_id":  "12345",
@@ -572,7 +534,7 @@ if err != nil {
 
 // 验证 Token（中间件自动处理）
 // 在 handler 中获取 JWT 数据
-jwtData, exists := c.Get("jwtData")
+jwtData, exists := c.Get(contextkey.JWTData)
 if !exists {
     response.ReturnError(c, response.UNAUTHENTICATED, "未找到认证信息")
     return
@@ -744,6 +706,7 @@ upstream http_services {
 
 server {
     listen 80;
+    # 生产环境可在这里配置 listen 443 ssl，或由 Caddy/Ingress/负载均衡统一终止 HTTPS。
     server_name api.example.com;
 
     location / {

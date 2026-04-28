@@ -4,10 +4,14 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
+	"runtime"
+	"strings"
 	"testing"
 
-	"github.com/gin-gonic/gin"
 	"http-services/config"
+
+	"github.com/gin-gonic/gin"
 )
 
 // openHealthResponse 用于解析通过路由访问健康检查接口的统一响应
@@ -49,5 +53,24 @@ func TestOpenHealth(t *testing.T) {
 	status, ok := body.Detail["status"].(string)
 	if !ok || status != "ok" {
 		t.Fatalf("unexpected detail.status: %v", body.Detail["status"])
+	}
+}
+
+func TestInitApiMiddlewareOrder(t *testing.T) {
+	router := InitApi()
+	if len(router.Handlers) < 3 {
+		t.Fatalf("global middleware count = %d, want at least 3", len(router.Handlers))
+	}
+
+	want := []string{
+		".TraceID.func",
+		".AccessLog.func",
+		".Recovery.func",
+	}
+	for i, namePart := range want {
+		got := runtime.FuncForPC(reflect.ValueOf(router.Handlers[i]).Pointer()).Name()
+		if !strings.Contains(got, namePart) {
+			t.Fatalf("middleware[%d] = %s, want name containing %s", i, got, namePart)
+		}
 	}
 }

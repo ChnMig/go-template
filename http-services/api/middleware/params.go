@@ -5,7 +5,7 @@ import (
 	"github.com/gin-gonic/gin/binding"
 
 	"http-services/api/response"
-	"http-services/utils/log"
+	"http-services/utils/contextkey"
 )
 
 // CheckParam 通用参数校验与绑定辅助函数。
@@ -17,6 +17,6 @@ func CheckParam(params interface{}, c *gin.Context) bool {
 	}
 	// 将本次绑定的参数挂到 context 上，供日志等场景使用。
 	// 注意：这里只是弱类型存储，不参与业务逻辑判断。
-	c.Set(log.BoundParamsKey, params)
+	c.Set(contextkey.BoundParams, params)
 	return true
 }
