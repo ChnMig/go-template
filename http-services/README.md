@@ -23,8 +23,9 @@ http-services/
 ├── api/                    # API 相关代码
 │   ├── app/               # 业务处理（按版本与分组组织）
 │   │   └── v1/
-│   │       └── open/
-│   │           └── health/    # 健康检查模块（开放）
+│   │       ├── open/
+│   │       │   └── health/    # 健康检查模块（开放，/api/v1/open/health）
+│   │       └── private/       # 私有接口预留（/api/v1/private）
 │   ├── middleware/        # 中间件
 │   │   ├── access-log.go     # 结构化访问日志
 │   │   ├── cross-domain.go   # 跨域处理
@@ -32,17 +33,27 @@ http-services/
 │   │   ├── page.go           # 分页处理
 │   │   ├── params.go         # 参数验证
 │   │   ├── rate-limit.go     # 限流中间件
+│   │   ├── security.go        # 安全响应头
+│   │   ├── trace-id.go        # 请求追踪 ID
 │   │   └── recovery.go       # 统一 panic recovery
 │   ├── response/          # 响应处理
 │   │   ├── code.go           # 状态码定义
 │   │   └── format.go         # 响应格式化
 │   └── router.go          # 路由配置
+├── common/               # 跨模块共享语义预留（模板中为占位目录）
 ├── domain/               # 领域模型与领域服务（核心业务规则）
+├── db/                   # 持久化适配器、模型、数据库常量与迁移预留
+│   ├── msqldb/           # MySQL/GORM 模型、查询 helper、迁移入口预留
+│   └── rdb/              # Redis 客户端与缓存访问封装预留
+├── services/             # 长驻服务与后台任务预留
+│   ├── cron/             # 定时任务调度预留
+│   └── health/           # health 相关后台任务占位
 ├── config/                # 配置管理
 │   ├── config.go          # 配置变量定义
 │   ├── load.go            # 配置加载
 │   └── check.go           # 配置校验
 ├── utils/                 # 工具函数
+│   ├── acme/              # ACME 证书工具
 │   ├── authentication/    # JWT 认证工具
 │   ├── contextkey/        # Gin context key 常量
 │   ├── encryption/        # 加密工具（BCrypt）
@@ -51,18 +62,43 @@ http-services/
 │   ├── pathtool/         # 路径工具
 │   ├── pidfile/          # pid 文件管理
 │   ├── random/           # 随机字符串
-│   └── runmodel/         # 运行模式检测
+│   ├── runmodel/         # 运行模式检测
+│   └── tlsfile/          # TLS 证书文件工具
 ├── log/                   # 日志文件目录
 ├── static/               # 静态资源目录
 ├── bin/                  # 构建输出目录
 ├── dist/                 # 跨平台打包产物（make build-cross）
+├── vendor/               # Go Modules 依赖镜像（vendor 模式）
+├── .env.example          # 环境变量配置示例
 ├── config.yaml           # 配置文件（不提交到 Git）
 ├── config.yaml.example   # 配置文件示例
+├── go.mod                # Go module 定义
+├── go.sum                # Go module 校验文件
 ├── main.go               # 程序入口
 ├── Makefile              # 构建脚本
 └── README.md             # 项目文档
 
 ```
+
+## 推荐代码分层
+
+参考真实项目 `fuli-services` 的落地方式，模板建议按下面的边界扩展。当前模板的路由样例位于 `api/app/v1/open/health`，私有接口预留在 `api/app/v1/private`。`go-template/http-services` 中的 `common/`、`db/`、`services/` 目前主要是扩展占位，`fuli-services` 在这些目录里已经扩展出大量共享语义、持久化和后台任务实现。
+
+- `api/`：传输层，负责 Gin 路由、中间件、请求 DTO、响应 DTO 与领域错误到接口响应的映射，不承载核心业务规则。
+- `domain/`：业务规则层，放状态流转、领域错误、跨模块流程编排等和 HTTP 无关的逻辑。
+- `db/`：持久化适配层，放数据库客户端、模型、查询封装、数据库常量和迁移入口。模板当前预留 `db/msqldb/` 与 `db/rdb/`，真实项目可继续按 MySQL、Redis 等适配器拆分。
+- `services/`：长驻服务和后台任务层，放 cron、消息队列 consumer/producer、worker 等运行期任务。模板当前预留 `services/cron/` 与 `services/health/` 占位。
+- `common/`：跨模块共享语义，适合放枚举、常量、跨模块 DTO、事件封装等业务共识，不替代 `utils/`。
+- `utils/`：基础设施工具，保留认证、加密、ID、日志、`utils/pathtool`、`utils/runmodel` 等通用能力，不放具体业务规则。
+- 真实应用如需部署、接口文档、脚本、示例或流水线，可按需增加 `docs/`、`deploy/`、`scripts/`、`examples/`、`.workflow/`。这些是 `fuli-services` 的生产化扩展，不是当前模板的必需目录。
+
+### 目录放置规则
+
+- `api/` vs `domain/`：`api/` 只处理 HTTP 入参、DTO、响应和错误翻译；状态流转、事务流程、跨模块业务规则放到 `domain/`。
+- `domain/` vs `services/`：`domain/` 放可被 handler、worker、cron 复用的业务规则；`services/` 放长驻任务的启动、调度、消费循环和生命周期管理。
+- `db/` vs `domain/`：`db/` 只表达存储结构、数据库常量、查询 helper、迁移和外部存储适配；跨表业务流程、状态机和领域错误不要下沉到 `db/`。
+- `common/` vs `utils/`：`common/` 放跨模块共享的业务语义，如枚举、业务常量、跨模块 DTO、事件定义；`utils/` 只放与业务无关的基础设施工具，如日志、认证、加密、ID、路径、pidfile。
+- 数据库常量优先跟随对应数据库模块放在 `db/` 下；只有被多个业务模块作为业务语义共同使用时，才抽到 `common/`。
 
 ## DTO 返回规范与领域分层示例
 

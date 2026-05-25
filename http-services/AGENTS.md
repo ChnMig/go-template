@@ -16,7 +16,10 @@ http-services/
 ├── Makefile         # build/run/dev/test/fmt/lint/verify
 ├── api/             # Gin 初始化、分层路由、中间件、统一响应
 ├── config/          # Viper 加载、默认值、环境变量、热重载、安全校验
+├── common/          # 跨模块共享业务语义预留，如枚举、常量、跨模块 DTO、事件定义
 ├── domain/health/   # 当前唯一领域模块
+├── db/              # 持久化适配层预留；msqldb/rdb 放模型、查询 helper、数据库常量、迁移与缓存访问
+├── services/        # 长驻任务预留；cron/worker/consumer 的启动、调度、生命周期管理
 ├── utils/           # 日志、JWT、context key、pidfile、ID 等基础设施
 └── vendor/          # 第三方代码；不要写入项目约束
 ```
@@ -35,6 +38,9 @@ http-services/
 | JWT 签发/解析 | `utils/authentication/jwt.go` | 直接读取 `config.JWTKey/JWTExpiration` |
 | Context key | `utils/contextkey/keys.go` | trace_id、logger、jwtData、bound params 统一 key |
 | 领域健康状态 | `domain/health/` | 领域错误与状态，不依赖 Gin |
+| 跨模块业务语义 | `common/` | 枚举、业务常量、跨模块 DTO、事件定义；当前为扩展占位 |
+| 持久化适配 | `db/msqldb/`, `db/rdb/` | 数据库模型、查询 helper、数据库常量、迁移、Redis 访问封装；当前为扩展占位 |
+| 长驻任务 | `services/cron/`, `services/health/` | cron、worker、consumer 的调度与生命周期；当前为扩展占位 |
 | 根级集成测试 | `pidfile_integration_test.go` | 构建真实二进制，`testing.Short()` 跳过 |
 
 ## CODE MAP
@@ -59,6 +65,11 @@ http-services/
 - `max_body_size` 支持 `B/KB/K/MB/M/GB/G`；非法单位会让配置加载失败。
 - Dev 日志输出到终端；Release 日志输出到 `log/<程序名>.log` 与 `log/<程序名>.gin.log`。
 - `log.gin_level` 为空时跟随 `log.level`；配置热重载后 logger 自动刷新。
+- `api/` 只处理 HTTP 入参、DTO、响应和错误翻译；核心业务规则放 `domain/`。
+- `domain/` 放可被 handler、worker、cron 复用的业务规则；`services/` 只放长驻任务的调度、消费循环和生命周期管理。
+- `db/` 只表达存储结构、数据库常量、查询 helper、迁移和外部存储适配；跨表业务流程、状态机和领域错误不要下沉到 `db/`。
+- `common/` 放跨模块共享业务语义；`utils/` 只放与业务无关的基础设施工具。
+- 数据库常量优先跟随对应数据库模块放在 `db/` 下；只有被多个业务模块作为业务语义共同使用时，才抽到 `common/`。
 - `config.yaml`、`bin/`、`dist/`、日志文件、`coverage.out` 不提交。
 - Go 注释使用中文为主；只在非显而易见逻辑处注释。
 
@@ -67,6 +78,8 @@ http-services/
 - 不要直接返回 DB/ORM/Service 内部结构体；API 对外数据必须经 DTO 显式挑选字段。
 - 不要在单个 handler 混用 REST HTTP status 与本项目 `HTTP 200 + body.code/status` 策略。
 - 不要把敏感数据放入 JWT；JWT 只放必要身份标识。
+- 不要把业务常量或数据库常量放进 `utils/`。
+- 不要把 cron/consumer/worker 的运行循环塞进 `domain/`；`domain/` 应保持可复用业务规则。
 - 不要提交真实 `config.yaml` 或密钥；JWT key 必须至少 32 字符且不能使用示例值。
 - 不要重新引入服务内 TLS/ACME 作为默认能力；当前服务只监听 HTTP，TLS 由反向代理/Ingress/负载均衡终止。
 - 不要在 `vendor/` 下写项目规范或修改第三方代码。

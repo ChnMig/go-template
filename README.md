@@ -123,30 +123,30 @@ jwt:
 - **密码加密**：使用 `BCrypt` 进行安全密码哈希
 - **分页能力**：内置分页工具，支持可配置默认值
 - **优雅下线（Graceful Shutdown）**：HTTP 服务器支持 10s 超时的优雅关闭
-- **健康检查**：提供 `/health` 和 `/ready` 等监控探针接口
+- **健康检查**：提供 `/api/v1/open/health` 单一健康检查端点
 
 ### 中间件（Middleware）
 
-- `RequestID`：为每个请求生成并传播请求 ID，支持链路追踪
+- `TraceID`：为每个请求生成并传播请求 ID，支持链路追踪
 - `SecurityHeaders`：设置常用安全响应头（如 `X-Content-Type-Options`、`X-Frame-Options` 等）
 - `BodySizeLimit`：请求体大小限制（默认 10MB），防止大包攻击
 - `TokenVerify`：JWT 鉴权中间件
-- `CorssDomainHandler`：跨域（CORS）处理中间件
+- `CorsDomainHandler`：跨域（CORS）处理中间件
 - `IPRateLimit`：基于 IP 的令牌桶限流
 - `TokenRateLimit`：基于登录用户 Token 的限流
 
 ### 工具类（Utilities）
 
-- **Authentication**（`util/authentication`）：
+- **Authentication**（`utils/authentication`）：
   - JWT 生成与解析
   - HS256 签名与校验
   - 标准 claims 支持
 
-- **Encryption**（`util/encryption`）：
+- **Encryption**（`utils/encryption`）：
   - 使用 `BCrypt` 的密码哈希
   - 密码校验工具
 
-- **ID Generation**（`util/id`）：
+- **ID Generation**（`utils/id`）：
   - 基于 `Sonyflake` 的分布式唯一 ID
   - 基于 MD5 的唯一 ID 生成
 
@@ -172,7 +172,7 @@ jwt:
 
 - 运行模式（开发 / 生产）由 `config.RunModel` 控制：开发模式输出到终端，生产模式输出到按日期滚动的日志文件。
 - 在 `api.InitApi` 中通过 `httplog.NewZapWriter` 将 Gin 的默认日志输出（访问日志、panic 等）重定向到 zap，框架日志与业务日志走同一管道。
-- `RequestID` 中间件会为每个请求生成 `trace_id`，并在 `gin.Context` 中注入带 `trace_id`、`method`、`path`、`client_ip` 等字段的 logger。
+- `TraceID` 中间件会为每个请求生成 `trace_id`，并在 `gin.Context` 中注入带 `trace_id`、`method`、`path`、`client_ip` 等字段的 logger。
 
 在接口 handler 中，推荐按如下方式使用 zap：
 
@@ -208,25 +208,33 @@ func (h *Handler) GetUser(c *gin.Context) {
 
 ```text
 http-services/
-├── api/
-│   ├── app/              # 业务接口入口
-│   │   ├── example/      # 示例接口（如有）
-│   │   └── health/       # 健康检查接口
-│   ├── middleware/       # 中间件组件
-│   └── response/         # 统一响应封装
-├── config/               # 配置加载与校验
-├── utils/                # 通用工具包
-│   ├── authentication/   # JWT 工具（含测试）
-│   ├── encryption/       # 密码加密工具（含测试）
-│   ├── id/               # ID 生成工具（含测试）
-│   ├── log/              # 日志封装
-│   ├── path-tool/       # 路径工具
-│   └── run-model/       # 运行模式工具
-├── db/                   # 数据库层（预留）
-├── services/             # 业务服务层（预留）
-├── common/               # 公共通用层（预留）
+├── api/                  # Gin 传输层、版本路由、中间件、统一响应
+│   ├── app/v1/open/health/  # 健康检查开放接口
+│   ├── app/v1/private/      # 私有接口预留
+│   ├── middleware/          # TraceID、访问日志、JWT、限流、CORS 等
+│   └── response/            # 统一响应封装
+├── common/              # 跨模块共享语义预留，如枚举、常量、跨模块 DTO
+├── domain/              # 领域模型与领域服务，放核心业务规则
+├── db/                  # 持久化适配层预留
+│   ├── msqldb/          # MySQL/GORM 模型、查询 helper、数据库常量、迁移
+│   └── rdb/             # Redis 客户端与缓存访问封装
+├── services/            # 长驻服务和后台任务预留
+│   ├── cron/            # 定时任务调度预留
+│   └── health/          # health 相关后台任务占位
+├── config/              # 配置加载、默认值、环境变量与安全校验
+├── utils/               # 基础设施工具，不放具体业务规则
+│   ├── authentication/  # JWT 工具
+│   ├── encryption/      # 密码加密工具
+│   ├── id/              # ID 生成工具
+│   ├── log/             # 日志封装
+│   ├── pathtool/        # 路径工具
+│   └── runmodel/        # 运行模式工具
+├── config.yaml.example  # 配置文件示例
+├── Makefile             # 构建、运行、测试脚本
 └── main.go              # 应用入口
 ```
+
+更完整的目录分层和放置规则见 `http-services/README.md`。
 
 ## 测试（Testing）
 
@@ -253,7 +261,7 @@ go test -cover ./...
 - **请求体大小限制**：通过 `BodySizeLimit` 防止大体积请求导致的 DoS 风险
 - **安全响应头**：自动为响应添加通用安全 Header
 - **限流能力**：支持按 IP 或登录用户 Token 进行限流
-- **请求 ID 追踪**：通过 `RequestID` 中间件支持链路追踪与问题排查
+- **请求 ID 追踪**：通过 `TraceID` 中间件支持链路追踪与问题排查
 
 ## 开发说明（Development Notes）
 
