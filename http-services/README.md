@@ -647,6 +647,8 @@ log:
 
 服务进程只提供 HTTP，不内置 ACME 自动证书签发或本地证书文件 TLS 热更新。生产环境建议在 Caddy、Nginx、Traefik、Kubernetes Ingress 或云负载均衡层终止 HTTPS，再将流量反向代理到本服务监听端口。
 
+服务默认信任本机反向代理来源 `127.0.0.1` 和 `::1`，因此通过本机 Caddy/Nginx 反代时，Gin 的 `ClientIP()` 会从 `X-Forwarded-For` / `X-Real-IP` 获取真实客户端 IP。如果反向代理与服务不在同一主机或同一 loopback 来源，请在 `api/router.go` 中将 `SetTrustedProxies` 调整为实际代理 IP 或网段，避免直接信任所有来源。
+
 ### 环境变量覆盖
 
 所有配置项都可以通过环境变量覆盖，使用 `HTTP_SERVICES_` 前缀，配置路径用下划线分隔：
@@ -1084,7 +1086,17 @@ RestartSec=5s
 WantedBy=multi-user.target
 ```
 
-### 2. 使用 Nginx 反向代理
+### 2. 使用 Caddy/Nginx 反向代理
+
+Caddy 示例：
+
+```caddyfile
+api.example.com {
+    reverse_proxy 127.0.0.1:8080
+}
+```
+
+Nginx 示例：
 
 ```nginx
 upstream http_services {
