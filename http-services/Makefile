@@ -1,4 +1,4 @@
-.PHONY: build build-local build-cross run dev clean clean-dist help test fmt lint verify
+.PHONY: build build-local build-cross run dev migrate clean clean-dist help test fmt lint verify
 
 # 版本信息
 VERSION := $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
@@ -66,6 +66,10 @@ run: build-local ## 构建并运行（生产模式）
 dev: build-local ## 构建并运行（开发模式）
 	@echo "启动服务（开发模式）..."
 	@./bin/$(OUTPUT_NAME) --dev
+
+migrate: build-local ## 构建并执行数据库迁移
+	@echo "执行数据库迁移..."
+	@./bin/$(OUTPUT_NAME) --migrate
 
 clean: ## 清理构建文件
 	@echo "清理构建文件..."

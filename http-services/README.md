@@ -42,9 +42,13 @@ http-services/
 │   └── router.go          # 路由配置
 ├── common/               # 跨模块共享语义预留（模板中为占位目录）
 ├── domain/               # 领域模型与领域服务（核心业务规则）
-├── db/                   # 持久化适配器、模型、数据库常量与迁移预留
-│   ├── msqldb/           # MySQL/GORM 模型、查询 helper、迁移入口预留
-│   └── rdb/              # Redis 客户端与缓存访问封装预留
+├── db/                   # 持久化适配器、模型、数据库常量与迁移入口
+│   ├── migrate.go        # 顶层迁移聚合入口（按业务表域注册迁移）
+│   ├── msqldb/           # MySQL/GORM client、基础模型、业务表域子包
+│   │   ├── client.go     # GORM client、连接池、GORM 日志配置
+│   │   └── base.go       # GORM 基础模型 BaseModel
+│   └── rdb/              # Redis client 与缓存/session 访问封装
+│       └── client.go     # Redis 初始化、获取与关闭
 ├── services/             # 长驻服务与后台任务预留
 │   ├── cron/             # 定时任务调度预留
 │   └── health/           # health 相关后台任务占位
@@ -68,7 +72,7 @@ http-services/
 ├── static/               # 静态资源目录
 ├── bin/                  # 构建输出目录
 ├── dist/                 # 跨平台打包产物（make build-cross）
-├── vendor/               # Go Modules 依赖镜像（vendor 模式）
+├── vendor/               # 本地依赖镜像目录；默认不提交，通常直接使用 go.mod/go.sum
 ├── .env.example          # 环境变量配置示例
 ├── config.yaml           # 配置文件（不提交到 Git）
 ├── config.yaml.example   # 配置文件示例
@@ -82,15 +86,15 @@ http-services/
 
 ## 推荐代码分层
 
-参考真实项目 `fuli-services` 的落地方式，模板建议按下面的边界扩展。当前模板的路由样例位于 `api/app/v1/open/health`，私有接口预留在 `api/app/v1/private`。`go-template/http-services` 中的 `common/`、`db/`、`services/` 目前主要是扩展占位，`fuli-services` 在这些目录里已经扩展出大量共享语义、持久化和后台任务实现。
+模板建议按下面的边界扩展。当前模板的路由样例位于 `api/app/v1/open/health`，私有接口预留在 `api/app/v1/private`。`go-template/http-services` 已内置基础持久化组件，`common/`、`services/` 仍主要作为扩展占位，真实项目可以在这些目录里继续扩展共享语义和后台任务实现。
 
 - `api/`：传输层，负责 Gin 路由、中间件、请求 DTO、响应 DTO 与领域错误到接口响应的映射，不承载核心业务规则。
 - `domain/`：业务规则层，放状态流转、领域错误、跨模块流程编排等和 HTTP 无关的逻辑。
-- `db/`：持久化适配层，放数据库客户端、模型、查询封装、数据库常量和迁移入口。模板当前预留 `db/msqldb/` 与 `db/rdb/`，真实项目可继续按 MySQL、Redis 等适配器拆分。
+- `db/`：持久化适配层，放数据库客户端、模型、查询封装、数据库常量和迁移入口。模板已内置 MySQL/GORM 与 Redis 基础 client，真实项目可继续按 MySQL、Redis 等适配器拆分。
 - `services/`：长驻服务和后台任务层，放 cron、消息队列 consumer/producer、worker 等运行期任务。模板当前预留 `services/cron/` 与 `services/health/` 占位。
 - `common/`：跨模块共享语义，适合放枚举、常量、跨模块 DTO、事件封装等业务共识，不替代 `utils/`。
 - `utils/`：基础设施工具，保留认证、加密、ID、日志、`utils/pathtool`、`utils/runmodel` 等通用能力，不放具体业务规则。
-- 真实应用如需部署、接口文档、脚本、示例或流水线，可按需增加 `docs/`、`deploy/`、`scripts/`、`examples/`、`.workflow/`。这些是 `fuli-services` 的生产化扩展，不是当前模板的必需目录。
+- 真实应用如需部署、接口文档、脚本、示例或流水线，可按需增加 `docs/`、`deploy/`、`scripts/`、`examples/`、`.workflow/`。这些属于真实项目的生产化扩展，不是当前模板的必需目录。
 
 ### 目录放置规则
 
@@ -99,6 +103,331 @@ http-services/
 - `db/` vs `domain/`：`db/` 只表达存储结构、数据库常量、查询 helper、迁移和外部存储适配；跨表业务流程、状态机和领域错误不要下沉到 `db/`。
 - `common/` vs `utils/`：`common/` 放跨模块共享的业务语义，如枚举、业务常量、跨模块 DTO、事件定义；`utils/` 只放与业务无关的基础设施工具，如日志、认证、加密、ID、路径、pidfile。
 - 数据库常量优先跟随对应数据库模块放在 `db/` 下；只有被多个业务模块作为业务语义共同使用时，才抽到 `common/`。
+
+### db 目录约定
+
+`db/` 是持久化适配层，只表达外部存储的连接、模型、查询、迁移和存储侧常量，不承载跨表业务流程、状态机、接口响应或用户提示文案。`domain/` 可以直接调用 `db/msqldb`、`db/rdb` 中的函数，但 `db/` 不应反向 import `domain/` 或 `api/`。
+
+模板内置了 `db/msqldb/` 与 `db/rdb/` 的基础组件。落到真实项目时，常见扩展方式如下：
+
+| 路径/文件 | 通常放什么 |
+| --- | --- |
+| `db/migrate.go` | 顶层数据库迁移聚合入口，按业务表域固定顺序调用各子包迁移。 |
+| `db/msqldb/client.go` | GORM MySQL 单例 client、连接池、GORM logger、初始化选项等。 |
+| `db/msqldb/base.go` | 表模型共享基础字段，例如 ID、创建时间、更新时间、软删除等；只保留 GORM 语义，不定义对外 JSON 契约。 |
+| `db/msqldb/<module>/model.go` | 某个业务表域的 GORM model，只描述表结构和存储字段，优先只写 GORM tag。 |
+| `db/msqldb/<module>/query.go` | 该表域的 Get/List/Create/Update/Delete、分页查询、条件查询等 helper。 |
+| `db/msqldb/<module>/constants.go` | 与数据库字段强相关的状态、类型、来源等常量，避免调用方硬编码 magic number。 |
+| `db/msqldb/<module>/migrate.go` | 子包内 `AutoMigrate` 聚合点，新增 model 时同步检查这里。 |
+| `db/rdb/client.go` | Redis client 初始化、连接获取、关闭逻辑，以及必要的连接池配置。 |
+
+`<module>` 建议按业务表域命名，而不是按技术动作命名。例如 `user/`、`order/`、`product/`、`notice/`、`area/` 可以分别代表用户、订单、商品、公告、地区树等表域；这些只是命名示例，不是模板必须内置的目录。
+
+查询函数应返回 DB model、持久层结构或基础错误；对外 DTO、HTTP 状态、响应 envelope、中文接口提示应留在 `api/`，业务规则错误和跨表流程应留在 `domain/`。事务敏感函数可以提供 `InTx` 变体，但事务边界优先由 `domain/` 决定。
+
+### 新增业务模块落地流程
+
+以新增 `user` 模块为例，建议按下面顺序放代码：
+
+```text
+db/msqldb/user/
+├── model.go       # user 相关表结构，嵌入 msqldb.BaseModel
+├── constants.go   # 和 user 表字段强相关的状态/类型常量
+├── query.go       # user 表的查询、写入、分页、事务 helper
+└── migrate.go     # user 表域 AutoMigrate 聚合点
+
+domain/user/
+├── errors.go      # user 领域错误，不写 HTTP response
+└── user.go        # user 业务规则、状态流转、跨表流程编排
+
+api/app/v1/private/user/
+├── dto.go         # 请求/响应 DTO，不直接暴露 DB model
+├── errors.go      # user 领域错误到 response code/message 的映射
+├── user.go        # handler：参数绑定、调用 domain、DTO 映射、返回响应
+└── router.go      # 注册 /api/v1/private/user 路由
+```
+
+落地步骤：
+
+1. 先在 `db/msqldb/<module>/model.go` 定义表结构；通用 ID、时间、软删除字段优先嵌入 `msqldb.BaseModel`。
+2. 在同包 `query.go` 写 Get/List/Create/Update/InTx 等持久化 helper，不写 HTTP 语义和用户提示文案。
+3. 在同包 `migrate.go` 提供 `Migrate(db *gorm.DB) error`，再到 `db/migrate.go` 的 `MigrateAll` 中按依赖顺序注册。
+4. 在 `domain/<module>/` 写业务规则、领域错误和跨表流程；需要事务时由 domain 决定事务边界，再调用 db 层的 `InTx` helper。
+5. 在 `api/app/v1/{open|private}/<module>/` 写路由、handler、DTO 和错误映射；handler 不直接返回 DB model。
+6. 只有需要多个模块共享的业务语义才放 `common/<module>/`；定时任务、consumer、worker、外部 client 放 `services/`，并薄调用 domain。
+
+### 放置决策速查
+
+写业务时如果不确定代码放哪里，先按下面的规则判断：
+
+| 你正在写的内容 | 放置位置 | 示例 |
+| --- | --- | --- |
+| HTTP 请求体、query 参数、响应字段 | `api/app/v1/{open|private}/<module>/dto.go` | `CreateUserRequest`、`UserDTO` |
+| Gin handler、参数绑定、响应返回 | `api/app/v1/{open|private}/<module>/<module>.go` | `CreateUser(c *gin.Context)` |
+| 路由注册 | `api/app/v1/{open|private}/<module>/router.go` | `group.POST("/user", CreateUser)` |
+| 领域错误、状态流转、跨表流程 | `domain/<module>/` | `ErrUserDisabled`、`DisableUser` |
+| 表结构、字段 tag、索引 | `db/msqldb/<module>/model.go` | `type User struct { msqldb.BaseModel ... }` |
+| 单表或表域查询写入 | `db/msqldb/<module>/query.go` | `GetUserByID`、`CreateUser` |
+| 和数据库字段强绑定的状态/类型 | `db/msqldb/<module>/constants.go` | `UserStatusEnabled = 1` |
+| 多模块共享的业务语义 | `common/<module>/` 或 `common/<scene>/` | 登录上下文 key、跨模块事件结构 |
+| Redis key 拼接和缓存/session 访问 | 优先 `domain/<module>/`，通过 `db/rdb.Client()` 获取 client | `userSessionRedisKey(userID)` |
+| 定时任务、consumer、worker 启停 | `services/<name>/` | `services/cron`、`services/kafkax` |
+| 通用且无业务含义的工具 | `utils/<name>/` | 日志、ID、加密、路径工具 |
+
+默认不额外创建 `repository/`、`biz/`、`dao/`、`model/` 顶层目录；当前模板已经用 `api -> domain -> db/services` 表达边界。只有当某个抽象被多个模块真实复用，或外部依赖需要替换以便测试时，再引入更细的接口抽象。
+
+### 完整示例：新增 user 模块
+
+下面的示例不是模板内置功能，而是展示新增业务时各层应该如何协作。
+
+#### 1. 持久层模型：`db/msqldb/user/model.go`
+
+```go
+package user
+
+import "http-services/db/msqldb"
+
+type User struct {
+    msqldb.BaseModel
+    Username string `gorm:"column:username;type:varchar(64);not null;uniqueIndex;comment:用户名"`
+    Nickname string `gorm:"column:nickname;type:varchar(64);not null;default:'';comment:昵称"`
+    Status   int    `gorm:"column:status;not null;default:1;index;comment:状态"`
+}
+```
+
+DB model 不写对外 JSON 契约；接口字段统一在 API DTO 中声明。
+
+#### 2. 持久层常量：`db/msqldb/user/constants.go`
+
+```go
+package user
+
+const (
+    UserStatusEnabled  = 1
+    UserStatusDisabled = 2
+)
+```
+
+这类常量和数据库字段强绑定，优先放在 `db/msqldb/user`。如果后来多个业务模块都把它当作业务语义使用，再考虑抽到 `common/user`。
+
+#### 3. 持久层查询：`db/msqldb/user/query.go`
+
+```go
+package user
+
+import (
+    "errors"
+
+    "http-services/db/msqldb"
+
+    "gorm.io/gorm"
+)
+
+func GetByID(id uint) (*User, error) {
+    db, err := msqldb.Client()
+    if err != nil {
+        return nil, err
+    }
+
+    var item User
+    err = db.Where("id = ?", id).First(&item).Error
+    if errors.Is(err, gorm.ErrRecordNotFound) {
+        return nil, err
+    }
+    if err != nil {
+        return nil, err
+    }
+    return &item, nil
+}
+
+func Create(item *User) error {
+    db, err := msqldb.Client()
+    if err != nil {
+        return err
+    }
+    return db.Create(item).Error
+}
+```
+
+`query.go` 不返回中文提示，不拼 API response，也不理解 Gin context。它只描述怎么读写存储。
+
+#### 4. 持久层迁移：`db/msqldb/user/migrate.go`
+
+```go
+package user
+
+import "gorm.io/gorm"
+
+func Migrate(db *gorm.DB) error {
+    return db.AutoMigrate(&User{})
+}
+```
+
+然后在 `db/migrate.go` 注册：
+
+```go
+import (
+    "fmt"
+
+    "http-services/db/msqldb"
+    userdb "http-services/db/msqldb/user"
+)
+
+func MigrateAll() error {
+    database, err := msqldb.Client()
+    if err != nil {
+        return fmt.Errorf("init mysql client: %w", err)
+    }
+    sqlDB, err := database.DB()
+    if err != nil {
+        return fmt.Errorf("get mysql sql.DB: %w", err)
+    }
+    if err := sqlDB.Ping(); err != nil {
+        return fmt.Errorf("ping mysql: %w", err)
+    }
+
+    return RunMigrators(database,
+        Migrator{Name: "user", Migrate: userdb.Migrate},
+    )
+}
+```
+
+#### 5. 领域层：`domain/user/user.go`
+
+```go
+package user
+
+import (
+    "errors"
+
+    userdb "http-services/db/msqldb/user"
+)
+
+var ErrUserDisabled = errors.New("user disabled")
+
+type Profile struct {
+    ID       uint
+    Username string
+    Nickname string
+}
+
+func GetProfile(id uint) (Profile, error) {
+    item, err := userdb.GetByID(id)
+    if err != nil {
+        return Profile{}, err
+    }
+    if item.Status == userdb.UserStatusDisabled {
+        return Profile{}, ErrUserDisabled
+    }
+
+    return Profile{
+        ID:       item.ID,
+        Username: item.Username,
+        Nickname: item.Nickname,
+    }, nil
+}
+```
+
+领域层可以使用 db model 作为内部输入，但对外返回更稳定的领域结构或结果；不要把 `gin.Context`、HTTP code、response envelope 放进这里。
+
+#### 6. API DTO：`api/app/v1/private/user/dto.go`
+
+```go
+package user
+
+type ProfileDTO struct {
+    ID       uint   `json:"id"`
+    Username string `json:"username"`
+    Nickname string `json:"nickname"`
+}
+```
+
+DTO 是对外契约。即使当前字段和 DB model 一样，也建议显式映射，避免未来 DB 字段变化直接泄漏到接口。
+
+#### 7. API 错误映射：`api/app/v1/private/user/errors.go`
+
+```go
+package user
+
+import (
+    "errors"
+
+    "http-services/api/response"
+    userdomain "http-services/domain/user"
+    httplog "http-services/utils/log"
+
+    "github.com/gin-gonic/gin"
+    "go.uber.org/zap"
+)
+
+func ReturnDomainError(c *gin.Context, err error) {
+    httplog.WithRequest(c).Error("user domain error", zap.Error(err))
+    switch {
+    case errors.Is(err, userdomain.ErrUserDisabled):
+        response.ReturnError(c, response.PERMISSION_DENIED, "用户已停用")
+    default:
+        response.ReturnError(c, response.INTERNAL, "用户操作失败")
+    }
+}
+```
+
+领域错误到用户可读文案的转换放在 API 层；这样同一个 domain 函数被 HTTP、cron、worker 调用时都不会携带接口语义。
+
+#### 8. API handler 与路由
+
+```go
+package user
+
+import (
+    "strconv"
+
+    "http-services/api/response"
+    userdomain "http-services/domain/user"
+
+    "github.com/gin-gonic/gin"
+)
+
+func GetProfile(c *gin.Context) {
+    id64, err := strconv.ParseUint(c.Query("id"), 10, 64)
+    if err != nil || id64 == 0 {
+        response.ReturnError(c, response.INVALID_ARGUMENT, "用户 ID 不合法")
+        return
+    }
+
+    profile, err := userdomain.GetProfile(uint(id64))
+    if err != nil {
+        ReturnDomainError(c, err)
+        return
+    }
+
+    response.ReturnOk(c, ProfileDTO{
+        ID:       profile.ID,
+        Username: profile.Username,
+        Nickname: profile.Nickname,
+    })
+}
+
+func RegisterPrivateRoutes(private *gin.RouterGroup) {
+    group := private.Group("/user")
+    group.GET("/profile", GetProfile)
+}
+```
+
+再到上一级聚合路由注册这个模块，例如在 `api/app/v1/private/router.go` 中调用 `user.RegisterPrivateRoutes(private)`。
+
+### 事务、Redis 与后台任务约定
+
+- 事务边界优先放在 `domain/`。如果一个流程要同时写用户表、余额表、流水表，由 domain 开启事务，再调用 db 层提供的 `InTx` helper；不要让单个 `query.go` 偷偷决定跨表事务。
+- Redis key 拼接函数放在使用它的业务包附近，例如 `domain/user/session.go` 里的 `userSessionRedisKey(id)`；不要把业务 Redis key 放到 `utils/`。访问 Redis 时优先使用 `rdb.Client()` 并处理错误，`GetClient()` 只作为兼容便捷入口。
+- `services/cron`、consumer、worker 的 handler 应尽量只有“解析任务参数 -> 调 domain -> 记录结果”，核心状态流转仍放在 `domain/`。
+- 配置项新增时同时改 `config/config.go`、`config/load.go`、`config.yaml.example` 和配置测试；环境变量名遵循 `HTTP_SERVICES_<SECTION>_<KEY>`。
+- 新增业务代码时优先补包内测试：db 层测查询条件和迁移注册，domain 层测状态流转和错误，api 层用 `httptest` 测响应 envelope。
+
+### common、domain 与 services 补充约定
+
+- `common/` 适合按端侧或跨模块语义拆包，例如 `auth/`、`tenant/`、`portal/`，放 context key、跨模块 DTO、事件结构或业务常量；不要放数据库 model，也不要替代 `utils/`。
+- `domain/` 可以按业务入口或核心业务域拆包，例如认证会话、用户、订单、健康检查等；它可以编排多个 `db/` 查询和外部 client，但不返回 Gin context、HTTP response 或 API envelope。
+- `services/` 放长期运行服务和外部系统适配，例如 `cron/`、Kafka consumer runtime、OpenAPI client、通知 client、worker 等；定时任务和 consumer handler 应尽量薄调用 `domain/`，不要把核心业务规则写成只能由后台任务复用的形态。
 
 ## DTO 返回规范与领域分层示例
 
@@ -262,6 +591,11 @@ make run
 
 # 查看版本信息
 ./bin/http-services -v
+
+# 执行数据库迁移后退出
+make migrate
+# 或
+./bin/http-services -m
 ```
 
 ## 配置说明
@@ -294,6 +628,13 @@ server:
 jwt:
   key: "YOUR_SECRET_KEY"          # JWT 签名密钥（至少 32 字符，必须修改！）
   expiration: "12h"               # Token 过期时间（如：12h, 24h, 30m）
+
+database:
+  mysql_dsn: ""                    # MySQL DSN；需要迁移或访问 db/msqldb 时填写
+
+redis:
+  host: "127.0.0.1:6379"           # Redis 地址；需要 session、验证码、缓存等能力时使用
+  password: ""                     # Redis 密码；未设置时留空
 
 log:
   max_size: 50                    # 单个日志文件最大大小（MB）
@@ -328,6 +669,11 @@ export HTTP_SERVICES_LOG_MAX_SIZE=100
 export HTTP_SERVICES_LOG_MAX_AGE=60
 export HTTP_SERVICES_LOG_LEVEL=warn
 export HTTP_SERVICES_LOG_GIN_LEVEL=info
+
+# 覆盖 MySQL / Redis 配置
+export HTTP_SERVICES_DATABASE_MYSQL_DSN="user:pass@tcp(127.0.0.1:3306)/app?charset=utf8mb4&parseTime=True&loc=Local"
+export HTTP_SERVICES_REDIS_HOST="127.0.0.1:6379"
+export HTTP_SERVICES_REDIS_PASSWORD=""
 
 # 运行服务
 ./bin/http-services
@@ -661,6 +1007,10 @@ log.Error("处理请求失败", zap.Error(err))
 ./bin/http-services -v
 ./bin/http-services --version
 
+# 执行数据库迁移后退出
+./bin/http-services -m
+./bin/http-services --migrate
+
 # 查看帮助
 ./bin/http-services -h
 ./bin/http-services --help
@@ -673,6 +1023,7 @@ make help      # 显示所有可用命令
 make build     # 构建项目
 make run       # 构建并运行（生产模式）
 make dev       # 构建并运行（开发模式）
+make migrate   # 构建并执行数据库迁移
 make clean     # 清理构建文件
 make version   # 显示版本信息
 make test      # 运行测试
@@ -860,6 +1211,8 @@ spec:
 - `golang-jwt/jwt` - JWT 认证
 - `uber-go/zap` - 日志库
 - `spf13/viper` - 配置管理
+- `gorm.io/gorm` / `gorm.io/driver/mysql` - MySQL 持久化基础组件
+- `redis/go-redis/v9` - Redis 客户端
 - `golang.org/x/time/rate` - 限流器
 - `alecthomas/kong` - 命令行解析
 - `sony/sonyflake` - 分布式 ID 生成

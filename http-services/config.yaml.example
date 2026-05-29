@@ -7,6 +7,7 @@
 #   export HTTP_SERVICES_SERVER_PORT=9090        # 覆盖 server.port
 #   export HTTP_SERVICES_JWT_KEY="my-secret"     # 覆盖 jwt.key
 #   export HTTP_SERVICES_LOG_MAX_SIZE=100        # 覆盖 log.max_size
+#   export HTTP_SERVICES_DATABASE_MYSQL_DSN="user:pass@tcp(127.0.0.1:3306)/app?charset=utf8mb4&parseTime=True&loc=Local"
 #
 # 配置文件查找顺序：
 # 1. 当前目录 (./config.yaml)
@@ -37,6 +38,13 @@ server:
 jwt:
   key: "YOUR_SECRET_KEY_HERE"  # 务必修改此密钥，否则存在安全风险（至少32字符）
   expiration: "12h"  # JWT token 过期时间，格式: 12h, 24h, 30m 等
+
+database:
+  mysql_dsn: ""  # MySQL DSN；需要运行迁移或访问 db/msqldb 时填写，建议通过环境变量覆盖
+
+redis:
+  host: "127.0.0.1:6379"  # Redis 连接地址；需要 session、验证码、缓存等能力时使用
+  password: ""            # Redis 密码；未设置时留空
 
 log:
   max_size: 50      # 单个日志文件最大大小（MB）

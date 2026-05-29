@@ -33,6 +33,8 @@ go-template 的目标是**提高开发效率，而不是极致简化**。😉
 2. 编辑 `config.yaml` 并根据实际环境修改配置，尤其是：
    - `jwt.key`: **必须修改为至少32字符的强密钥** (服务启动时会进行安全检查)
    - `jwt.expiration`: 访问令牌有效期（例如 `"12h"`、`"24h"`、`"30m"`）
+   - `database.mysql_dsn`: 需要运行迁移或访问 MySQL 时填写
+   - `redis.host` / `redis.password`: 需要 session、验证码、缓存等 Redis 能力时填写
 
 3. 构建并运行：
 
@@ -48,6 +50,9 @@ go-template 的目标是**提高开发效率，而不是极致简化**。😉
 
    # 运行（开发模式）
    make dev
+
+   # 执行数据库迁移后退出（需要配置 database.mysql_dsn）
+   make migrate
    ```
 
 ### 跨平台打包（Cross-Platform Packaging）
@@ -87,6 +92,9 @@ make build CROSS=1 \
 # 显示版本信息
 ./bin/http-services --version
 
+# 执行数据库迁移后退出
+./bin/http-services --migrate
+
 # 显示帮助
 ./bin/http-services --help
 ```
@@ -104,6 +112,13 @@ server:
 jwt:
   key: "YOUR_SECRET_KEY_HERE"
   expiration: "12h"
+
+database:
+  mysql_dsn: ""
+
+redis:
+  host: "127.0.0.1:6379"
+  password: ""
 ```
 
 **重要说明**：`config.yaml` 已被加入 `.gitignore`，避免敏感配置被提交到仓库。请始终以 `config.yaml.example` 为模版创建本地配置。
@@ -161,6 +176,8 @@ jwt:
 
 - `github.com/gin-gonic/gin`：Web 框架
 - `github.com/golang-jwt/jwt/v5`：JWT 实现
+- `gorm.io/gorm` / `gorm.io/driver/mysql`：MySQL 持久化基础组件
+- `github.com/redis/go-redis/v9`：Redis 客户端
 - `github.com/goccy/go-yaml`：YAML 解析
 - `github.com/alecthomas/kong`：命令行解析
 - `golang.org/x/crypto/bcrypt`：密码加密
@@ -215,9 +232,10 @@ http-services/
 │   └── response/            # 统一响应封装
 ├── common/              # 跨模块共享语义预留，如枚举、常量、跨模块 DTO
 ├── domain/              # 领域模型与领域服务，放核心业务规则
-├── db/                  # 持久化适配层预留
-│   ├── msqldb/          # MySQL/GORM 模型、查询 helper、数据库常量、迁移
-│   └── rdb/             # Redis 客户端与缓存访问封装
+├── db/                  # 持久化适配层，详细约定见 http-services/README.md
+│   ├── migrate.go       # 顶层数据库迁移聚合入口
+│   ├── msqldb/          # MySQL/GORM client、BaseModel、model/query/constants 扩展位置
+│   └── rdb/             # Redis client、session、cache、幂等访问封装扩展位置
 ├── services/            # 长驻服务和后台任务预留
 │   ├── cron/            # 定时任务调度预留
 │   └── health/          # health 相关后台任务占位
@@ -234,7 +252,7 @@ http-services/
 └── main.go              # 应用入口
 ```
 
-更完整的目录分层和放置规则见 `http-services/README.md`。
+根 README 只保留结构总览；`db/`、`domain/`、`services/` 等目录的细粒度放置规则见 `http-services/README.md`。
 
 ## 测试（Testing）
 

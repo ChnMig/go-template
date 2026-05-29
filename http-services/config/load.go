@@ -73,6 +73,13 @@ func setDefaults() {
 	v.SetDefault("log.max_age", 30)  // 保留 30 天
 	v.SetDefault("log.level", "info")
 	v.SetDefault("log.gin_level", "")
+
+	// Database 默认配置
+	v.SetDefault("database.mysql_dsn", "")
+
+	// Redis 默认配置
+	v.SetDefault("redis.host", "127.0.0.1:6379")
+	v.SetDefault("redis.password", "")
 }
 
 // applyConfig 将 Viper 配置应用到全局变量
@@ -116,6 +123,13 @@ func applyConfig() error {
 	LogMaxAge = v.GetInt("log.max_age")
 	LogLevel = v.GetString("log.level")
 	GinLogLevel = v.GetString("log.gin_level")
+
+	// Database 配置
+	MysqlDSN = v.GetString("database.mysql_dsn")
+
+	// Redis 配置
+	RedisHost = v.GetString("redis.host")
+	RedisPassword = v.GetString("redis.password")
 
 	return nil
 }

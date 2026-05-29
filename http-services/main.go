@@ -12,6 +12,9 @@ import (
 	"http-services/api"
 	"http-services/api/middleware"
 	"http-services/config"
+	"http-services/db"
+	"http-services/db/msqldb"
+	"http-services/db/rdb"
 	"http-services/utils/log"
 	"http-services/utils/pathtool"
 	"http-services/utils/pidfile"
@@ -24,6 +27,7 @@ import (
 var CLI struct {
 	Dev     bool `help:"Run in development mode" short:"d"`
 	Version bool `help:"Show version information" short:"v"`
+	Migrate bool `help:"Run database migrations and exit" short:"m"`
 }
 
 var (
@@ -80,6 +84,19 @@ func main() {
 		config.JWTKey,
 		int64(config.JWTExpiration),
 	)
+
+	if CLI.Migrate {
+		zap.L().Info("Running database migrations...")
+		if err := db.MigrateAll(); err != nil {
+			zap.L().Fatal("Database migration failed", zap.Error(err))
+		}
+		msqldb.CloseClient()
+		rdb.CloseClient()
+		middleware.CleanupAllLimiters()
+		log.StopMonitor()
+		zap.L().Info("Database migration completed successfully")
+		ctx.Exit(0)
+	}
 
 	zap.L().Info("Starting HTTP service",
 		zap.String("mode", config.RunModel),
@@ -156,6 +173,8 @@ func main() {
 	// 清理资源
 	zap.L().Info("Cleaning up resources...")
 	middleware.CleanupAllLimiters() // 清理限流器
+	msqldb.CloseClient()            // 关闭 MySQL 连接池（如已初始化）
+	rdb.CloseClient()               // 关闭 Redis 连接池（如已初始化）
 	log.StopMonitor()               // 停止日志监控并刷新缓冲区
 
 	// 删除 pid 文件（文件不存在视为成功）

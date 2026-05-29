@@ -47,7 +47,7 @@ func TestSetDefaults(t *testing.T) {
 	tests := []struct {
 		name string
 		key  string
-		want interface{}
+		want any
 	}{
 		{"server port", "server.port", 8080},
 		{"max body size", "server.max_body_size", "10MB"},
@@ -55,6 +55,9 @@ func TestSetDefaults(t *testing.T) {
 		{"jwt expiration", "jwt.expiration", "12h"},
 		{"log max size", "log.max_size", 50},
 		{"enable rate limit", "server.enable_rate_limit", false},
+		{"database mysql dsn", "database.mysql_dsn", ""},
+		{"redis host", "redis.host", "127.0.0.1:6379"},
+		{"redis password", "redis.password", ""},
 	}
 
 	for _, tt := range tests {
@@ -95,17 +98,29 @@ func TestApplyConfig(t *testing.T) {
 		t.Errorf("LogMaxSize = %d, want 50", LogMaxSize)
 	}
 
+	if MysqlDSN != "" {
+		t.Errorf("MysqlDSN = %q, want empty string", MysqlDSN)
+	}
+
+	if RedisHost != "127.0.0.1:6379" {
+		t.Errorf("RedisHost = %q, want 127.0.0.1:6379", RedisHost)
+	}
+
 }
 
 func TestLoadConfigWithEnv(t *testing.T) {
 	// 设置环境变量
 	os.Setenv("HTTP_SERVICES_SERVER_PORT", "9090")
 	os.Setenv("HTTP_SERVICES_JWT_EXPIRATION", "24h")
+	os.Setenv("HTTP_SERVICES_DATABASE_MYSQL_DSN", "user:pass@tcp(127.0.0.1:3306)/app?charset=utf8mb4&parseTime=True&loc=Local")
+	os.Setenv("HTTP_SERVICES_REDIS_HOST", "127.0.0.1:6380")
 	pidPath := filepath.Join(t.TempDir(), "http-services.pid")
 	os.Setenv("HTTP_SERVICES_SERVER_PID_FILE", pidPath)
 	defer func() {
 		os.Unsetenv("HTTP_SERVICES_SERVER_PORT")
 		os.Unsetenv("HTTP_SERVICES_JWT_EXPIRATION")
+		os.Unsetenv("HTTP_SERVICES_DATABASE_MYSQL_DSN")
+		os.Unsetenv("HTTP_SERVICES_REDIS_HOST")
 		os.Unsetenv("HTTP_SERVICES_SERVER_PID_FILE")
 	}()
 
@@ -126,6 +141,14 @@ func TestLoadConfigWithEnv(t *testing.T) {
 
 	if PidFile != pidPath {
 		t.Errorf("PidFile = %s, want %s (from env)", PidFile, pidPath)
+	}
+
+	if MysqlDSN != "user:pass@tcp(127.0.0.1:3306)/app?charset=utf8mb4&parseTime=True&loc=Local" {
+		t.Errorf("MysqlDSN = %q, want env value", MysqlDSN)
+	}
+
+	if RedisHost != "127.0.0.1:6380" {
+		t.Errorf("RedisHost = %q, want 127.0.0.1:6380 (from env)", RedisHost)
 	}
 
 }
