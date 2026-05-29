@@ -23,8 +23,8 @@ func InitApi() *gin.Engine {
 
 	gin.SetMode(gin.ReleaseMode)
 	router := gin.New()
-	// https://pkg.go.dev/github.com/gin-gonic/gin#readme-don-t-trust-all-proxies
-	router.SetTrustedProxies(nil)
+	// Trust local reverse proxies such as Caddy/Nginx so ClientIP can use forwarded headers.
+	router.SetTrustedProxies([]string{"127.0.0.1", "::1"})
 
 	// 全局中间件：先注入 trace_id，再让 access log 包住 recovery。
 	// handler panic 时 Recovery 先写统一响应，AccessLog 的 defer 再记录最终状态。
