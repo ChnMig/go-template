@@ -1,9 +1,5 @@
 # PROJECT KNOWLEDGE BASE
 
-**Generated:** 2026-04-29 Asia/Shanghai
-**Commit:** 8c8b648
-**Branch:** main
-
 ## OVERVIEW
 
 Gin + Viper + Zap 的 HTTP API 服务模板。仓库是单 Go module：`http-services`，可执行入口在根目录 `main.go`，没有 `cmd/`、`internal/`、`pkg/` 拆分。
@@ -37,10 +33,11 @@ http-services/
 | 日志生命周期 | `utils/log/log.go` | dev/release 分流、Gin 日志独立文件、轮转、热重建 |
 | JWT 签发/解析 | `utils/authentication/jwt.go` | 直接读取 `config.JWTKey/JWTExpiration` |
 | Context key | `utils/contextkey/keys.go` | trace_id、logger、jwtData、bound params 统一 key |
+| 并发任务组 | `utils/taskgroup/` | 按策略取消并发任务、恢复 panic，并按输入顺序返回错误 |
 | 领域健康状态 | `domain/health/` | 领域错误与状态，不依赖 Gin |
 | 跨模块业务语义 | `common/` | 枚举、业务常量、跨模块 DTO、事件定义；当前为扩展占位 |
 | 持久化适配 | `db/migrate.go`, `db/msqldb/`, `db/rdb/` | MySQL/GORM client、BaseModel、迁移聚合、Redis client、模型/查询扩展位置 |
-| 长驻任务 | `services/cron/`, `services/health/` | cron、worker、consumer 的调度与生命周期；当前为扩展占位 |
+| 长驻任务 | `services/cron/` | cron、worker、consumer 的调度与生命周期；当前为扩展占位 |
 | 根级集成测试 | `pidfile_integration_test.go` | 构建真实二进制，`testing.Short()` 跳过 |
 
 ## CODE MAP
@@ -54,6 +51,7 @@ http-services/
 | `config.WatchConfig` | func | `config/load.go` | 配置热重载，回调里刷新 logger |
 | `config.CheckConfig` | func | `config/check.go` | JWT 配置安全校验 |
 | `log.SetLogger` | func | `utils/log/log.go` | 按运行模式和日志级别重建业务/Gin logger |
+| `taskgroup.Run` | func | `utils/taskgroup/taskgroup.go` | 执行命名并发任务，等待全部退出并按输入顺序返回错误 |
 | `middleware.CleanupAllLimiters` | func | `api/middleware/rate-limit.go` | 服务退出时清理限流器 goroutine |
 | `db.MigrateAll` | func | `db/migrate.go` | 顶层数据库迁移聚合入口 |
 | `msqldb.GetClient` | func | `db/msqldb/client.go` | 懒初始化 GORM MySQL client |
@@ -107,6 +105,7 @@ make run
 make dev
 make migrate
 make test
+make test-race
 make fmt
 make lint
 make verify
@@ -117,9 +116,10 @@ make version
 
 Command internals:
 - `make test` runs `go test -v -coverprofile=coverage.out -covermode=atomic ./...` and prints Chinese summary + total coverage.
+- `make test-race` runs `go test -race -shuffle=on -count=1 ./...`.
 - `make fmt` runs `gofmt -w $(find . -name "*.go" -not -path "./vendor/*")`.
 - `make lint` runs `go vet ./...`.
-- `make verify` runs `fmt -> lint -> test`.
+- `make verify` runs `fmt -> lint -> test -> test-race`.
 - Cross build outputs archives to `dist/`; Windows uses zip when available, others use tar.gz.
 
 ## TESTS

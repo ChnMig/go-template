@@ -50,14 +50,12 @@ http-services/
 │   └── rdb/              # Redis client 与缓存/session 访问封装
 │       └── client.go     # Redis 初始化、获取与关闭
 ├── services/             # 长驻服务与后台任务预留
-│   ├── cron/             # 定时任务调度预留
-│   └── health/           # health 相关后台任务占位
+│   └── cron/             # 定时任务调度预留
 ├── config/                # 配置管理
 │   ├── config.go          # 配置变量定义
 │   ├── load.go            # 配置加载
 │   └── check.go           # 配置校验
 ├── utils/                 # 工具函数
-│   ├── acme/              # ACME 证书工具
 │   ├── authentication/    # JWT 认证工具
 │   ├── contextkey/        # Gin context key 常量
 │   ├── encryption/        # 加密工具（BCrypt）
@@ -67,7 +65,7 @@ http-services/
 │   ├── pidfile/          # pid 文件管理
 │   ├── random/           # 随机字符串
 │   ├── runmodel/         # 运行模式检测
-│   └── tlsfile/          # TLS 证书文件工具
+│   └── taskgroup/        # 并发任务组：取消、panic 恢复与有序错误
 ├── log/                   # 日志文件目录
 ├── static/               # 静态资源目录
 ├── bin/                  # 构建输出目录
@@ -91,9 +89,9 @@ http-services/
 - `api/`：传输层，负责 Gin 路由、中间件、请求 DTO、响应 DTO 与领域错误到接口响应的映射，不承载核心业务规则。
 - `domain/`：业务规则层，放状态流转、领域错误、跨模块流程编排等和 HTTP 无关的逻辑。
 - `db/`：持久化适配层，放数据库客户端、模型、查询封装、数据库常量和迁移入口。模板已内置 MySQL/GORM 与 Redis 基础 client，真实项目可继续按 MySQL、Redis 等适配器拆分。
-- `services/`：长驻服务和后台任务层，放 cron、消息队列 consumer/producer、worker 等运行期任务。模板当前预留 `services/cron/` 与 `services/health/` 占位。
+- `services/`：长驻服务和后台任务层，放 cron、消息队列 consumer/producer、worker 等运行期任务。模板当前预留 `services/cron/` 占位。
 - `common/`：跨模块共享语义，适合放枚举、常量、跨模块 DTO、事件封装等业务共识，不替代 `utils/`。
-- `utils/`：基础设施工具，保留认证、加密、ID、日志、`utils/pathtool`、`utils/runmodel` 等通用能力，不放具体业务规则。
+- `utils/`：基础设施工具，保留认证、加密、ID、日志、`utils/pathtool`、`utils/runmodel`、`utils/taskgroup` 等通用能力，不放具体业务规则。
 - 真实应用如需部署、接口文档、脚本、示例或流水线，可按需增加 `docs/`、`deploy/`、`scripts/`、`examples/`、`.workflow/`。这些属于真实项目的生产化扩展，不是当前模板的必需目录。
 
 ### 目录放置规则
@@ -1029,6 +1027,8 @@ make migrate   # 构建并执行数据库迁移
 make clean     # 清理构建文件
 make version   # 显示版本信息
 make test      # 运行测试
+make test-race # 使用 race detector 与随机顺序运行测试
+make verify    # 依次执行格式化、静态检查、覆盖率测试和 race 测试
 ```
 
 ### 测试说明
@@ -1036,6 +1036,7 @@ make test      # 运行测试
 - 运行 `make test`：
   - 输出中文汇总（包数量、通过/失败、用例通过/失败/跳过）
   - 生成覆盖率文件 `coverage.out` 并打印总覆盖率
+- 运行 `make test-race`：使用 `-race -shuffle=on -count=1` 检查数据竞争和测试顺序依赖
 - 如需仅查看覆盖率，也可直接使用 `go tool cover -func=coverage.out`
 
 ## API 示例

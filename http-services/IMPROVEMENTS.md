@@ -173,14 +173,14 @@ GOSUMDB=sum.golang.google.cn
 
 ### 新增测试文件
 - `config/load_test.go` - 配置加载测试 (75% 覆盖率)
-- `api/app/health/health_test.go` - 健康检查测试 (100% 覆盖率)
+- `api/app/v1/open/health/health_test.go` - 健康检查测试
 - 扩展 `api/response/format_test.go` - 增加 trace_id 测试 (97.1% 覆盖率)
 
 ### 当前测试覆盖率
 
 | 包 | 覆盖率 | 状态 |
 |---|--------|------|
-| api/app/health | 100% | ✅ |
+| api/app/v1/open/health | 历史快照 | ✅ |
 | utils/id | 100% | ✅ |
 | api/response | 97.1% | ✅ |
 | utils/authentication | 90.9% | ✅ |
@@ -193,11 +193,9 @@ GOSUMDB=sum.golang.google.cn
 # 运行所有测试
 make test
 
-# 查看覆盖率
-make test-cover
-
-# 生成 HTML 覆盖率报告
+# 生成覆盖率报告
 go test -coverprofile=coverage.out ./...
+go tool cover -func=coverage.out
 go tool cover -html=coverage.out
 ```
 
@@ -298,13 +296,13 @@ func Handler(c *gin.Context) {
 
 ### 中优先级
 - [ ] 添加 Docker 支持
-- [ ] 实现配置热重载
+- [x] 实现配置热重载
 - [ ] 添加性能基准测试
 
 ### 低优先级
-- [ ] 实现优雅的数据库连接池
-- [ ] 添加请求/响应日志中间件
-- [ ] 实现 API 版本管理策略
+- [x] 实现数据库连接池基础配置
+- [x] 添加请求访问日志与 panic recovery 中间件
+- [x] 实现 API 版本路由结构
 
 ---
 

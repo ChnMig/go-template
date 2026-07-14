@@ -1,4 +1,4 @@
-.PHONY: build build-local build-cross run dev migrate clean clean-dist help test fmt lint verify
+.PHONY: build build-local build-cross run dev migrate clean clean-dist help test test-race fmt lint verify
 
 # 版本信息
 VERSION := $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
@@ -88,14 +88,14 @@ version: ## 显示版本信息
 
 test: ## 运行测试并显示覆盖率（含中文提示与结果解析）
 	@echo "运行测试（带覆盖率）..."
-	@set -o pipefail; \
-	OUT=$$(mktemp -t go-test-XXXXXX); \
+	@OUT=$$(mktemp -t go-test-XXXXXX); \
 	trap 'rm -f "$$OUT"' EXIT; \
-	if go test -v -coverprofile=coverage.out -covermode=atomic ./... | tee "$$OUT"; then \
+	if go test -v -coverprofile=coverage.out -covermode=atomic ./... >"$$OUT" 2>&1; then \
 	  STATUS=0; \
 	else \
 	  STATUS=$$?; \
 	fi; \
+	cat "$$OUT"; \
 	PASS_PKGS=$$(grep -c '^ok[[:space:]]' "$$OUT" || true); \
 	FAIL_PKGS=$$(grep -c '^FAIL[[:space:]]' "$$OUT" || true); \
 	TOTAL_PKGS=$$((PASS_PKGS+FAIL_PKGS)); \
@@ -112,6 +112,10 @@ test: ## 运行测试并显示覆盖率（含中文提示与结果解析）
 	echo "总覆盖率：$$TOTAL_COV"; \
 	exit $$STATUS
 
+test-race: ## 使用 race detector 与随机顺序运行测试
+	@echo "运行 race + shuffle 测试..."
+	@go test -race -shuffle=on -count=1 ./...
+
 fmt: ## 格式化代码
 	@echo "格式化代码..."
 	@gofmt -w $$(find . -name "*.go" -not -path "./vendor/*")
@@ -122,9 +126,10 @@ lint: ## 运行代码检查（go vet）
 	@go vet ./...
 	@echo "✓ 检查完成"
 
-verify: ## 验证：fmt -> lint -> test
+verify: ## 验证：fmt -> lint -> test -> test-race
 	@$(MAKE) fmt
 	@$(MAKE) lint
 	@$(MAKE) test
+	@$(MAKE) test-race
 
 .DEFAULT_GOAL := help
