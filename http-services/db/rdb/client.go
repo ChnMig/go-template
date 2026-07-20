@@ -46,6 +46,7 @@ func Init() error {
 		PoolSize:     100,
 		MinIdleConns: 10,
 	})
+	addRedisKeyPrefixHook(redisClient, config.RedisKeyPrefix)
 
 	if err := redisClient.Ping(context.Background()).Err(); err != nil {
 		zap.L().Error("redis connection failed", zap.Error(err))

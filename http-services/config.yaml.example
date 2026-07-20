@@ -45,6 +45,7 @@ database:
 redis:
   host: "127.0.0.1:6379"  # Redis 连接地址；需要 session、验证码、缓存等能力时使用
   password: ""            # Redis 密码；未设置时留空
+  key_prefix: ""          # 公共 key 前缀；非空时必须以 : 结尾，例如 service:env:
 
 log:
   max_size: 50      # 单个日志文件最大大小（MB）

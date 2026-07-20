@@ -80,6 +80,7 @@ func setDefaults() {
 	// Redis 默认配置
 	v.SetDefault("redis.host", "127.0.0.1:6379")
 	v.SetDefault("redis.password", "")
+	v.SetDefault("redis.key_prefix", "")
 }
 
 // applyConfig 将 Viper 配置应用到全局变量
@@ -130,6 +131,7 @@ func applyConfig() error {
 	// Redis 配置
 	RedisHost = v.GetString("redis.host")
 	RedisPassword = v.GetString("redis.password")
+	RedisKeyPrefix = strings.TrimSpace(v.GetString("redis.key_prefix"))
 
 	return nil
 }

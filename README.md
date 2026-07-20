@@ -119,9 +119,12 @@ database:
 redis:
   host: "127.0.0.1:6379"
   password: ""
+  key_prefix: "" # 非空时必须以 : 结尾，例如 service:env:
 ```
 
 **重要说明**：`config.yaml` 已被加入 `.gitignore`，避免敏感配置被提交到仓库。请始终以 `config.yaml.example` 为模版创建本地配置。
+
+`redis.key_prefix` 默认为空；每个非空值都必须以 `:` 结尾，加载器不会自动补齐或校验。启用或修改前缀后需要重启服务，且模板不会迁移旧前缀下的 Redis key。内置 hook 支持的命令族见 [HTTP Services Redis 公共 key 前缀说明](http-services/README.md#redis-公共-key-前缀)；其他自定义命令和 Redis module 命令需要显式增加 hook 支持。
 
 ### Configuration Reload & Restart
 

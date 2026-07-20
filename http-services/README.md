@@ -633,6 +633,7 @@ database:
 redis:
   host: "127.0.0.1:6379"           # Redis 地址；需要 session、验证码、缓存等能力时使用
   password: ""                     # Redis 密码；未设置时留空
+  key_prefix: ""                   # Redis key 公共前缀；非空时必须以 : 结尾，例如 service:env:
 
 log:
   max_size: 50                    # 单个日志文件最大大小（MB）
@@ -640,6 +641,14 @@ log:
   level: "info"                  # 业务日志级别: debug, info, warn, error
   gin_level: ""                  # Gin access/error 日志级别；为空时跟随 level
 ```
+
+#### Redis 公共 key 前缀
+
+`redis.key_prefix` 默认为空，因此不会改变现有 Redis key。YAML 和环境变量中的值会去除首尾空白；每个非空前缀都必须以 `:` 结尾，例如 `service:env:`。这是配置使用契约，加载器不会自动补充分隔符或校验格式。
+
+Redis client 初始化时会捕获该前缀，因此修改后必须重启服务。切换前缀不会迁移或删除旧前缀下的 key；如需保留旧数据，请自行安排迁移或清理。
+
+内置 hook 覆盖常用字符串与计数器、过期、Hash、List、Set、Sorted Set、多 key、重命名/复制、Lua 声明 key、`KEYS` 以及 `SCAN`/`HSCAN`/`SSCAN`/`ZSCAN` 等命令。启用公共前缀后，全局 `SCAN` 必须提供非空 `MATCH`（例如 `*`），否则会直接返回错误，避免扫描到其他命名空间。自定义命令和 Redis module 命令会原样透传；依赖公共前缀前，必须为其 key 参数位置显式增加 hook 支持和测试。
 
 ### HTTPS/TLS 部署
 
@@ -674,6 +683,7 @@ export HTTP_SERVICES_LOG_GIN_LEVEL=info
 export HTTP_SERVICES_DATABASE_MYSQL_DSN="user:pass@tcp(127.0.0.1:3306)/app?charset=utf8mb4&parseTime=True&loc=Local"
 export HTTP_SERVICES_REDIS_HOST="127.0.0.1:6379"
 export HTTP_SERVICES_REDIS_PASSWORD=""
+export HTTP_SERVICES_REDIS_KEY_PREFIX="service:env:"
 
 # 运行服务
 ./bin/http-services

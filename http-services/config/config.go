@@ -56,8 +56,9 @@ var (
 	MysqlDSN string // MySQL 数据库连接字符串
 
 	// Redis
-	RedisHost     string // Redis 连接地址
-	RedisPassword string // Redis 密码
+	RedisHost      string // Redis 连接地址
+	RedisPassword  string // Redis 密码
+	RedisKeyPrefix string
 )
 
 // 分页配置

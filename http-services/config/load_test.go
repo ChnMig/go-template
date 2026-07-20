@@ -58,6 +58,7 @@ func TestSetDefaults(t *testing.T) {
 		{"database mysql dsn", "database.mysql_dsn", ""},
 		{"redis host", "redis.host", "127.0.0.1:6379"},
 		{"redis password", "redis.password", ""},
+		{"redis key prefix", "redis.key_prefix", ""},
 	}
 
 	for _, tt := range tests {
@@ -151,6 +152,55 @@ func TestLoadConfigWithEnv(t *testing.T) {
 		t.Errorf("RedisHost = %q, want 127.0.0.1:6380 (from env)", RedisHost)
 	}
 
+}
+
+func TestLoadConfig_RedisKeyPrefix(t *testing.T) {
+	tests := []struct {
+		name     string
+		yaml     string
+		envValue string
+		setEnv   bool
+		want     string
+	}{
+		{name: "defaults to empty", want: ""},
+		{name: "trims yaml value", yaml: "redis:\n  key_prefix: \" service:env: \"\n", want: "service:env:"},
+		{name: "treats whitespace-only yaml value as empty", yaml: "redis:\n  key_prefix: \"   \"\n", want: ""},
+		{name: "reads trimmed environment value", envValue: " service:env: ", setEnv: true, want: "service:env:"},
+		{name: "environment overrides distinct yaml value", yaml: "redis:\n  key_prefix: \"yaml:\"\n", envValue: " env: ", setEnv: true, want: "env:"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			originalAbsPath := AbsPath
+			originalPrefix := RedisKeyPrefix
+			originalViper := v
+			t.Cleanup(func() {
+				AbsPath = originalAbsPath
+				RedisKeyPrefix = originalPrefix
+				v = originalViper
+			})
+
+			configDir := t.TempDir()
+			AbsPath = configDir
+			if tt.setEnv {
+				t.Setenv("HTTP_SERVICES_REDIS_KEY_PREFIX", tt.envValue)
+			} else {
+				t.Setenv("HTTP_SERVICES_REDIS_KEY_PREFIX", "")
+			}
+			if tt.yaml != "" {
+				if err := os.WriteFile(filepath.Join(configDir, "config.yaml"), []byte(tt.yaml), 0o600); err != nil {
+					t.Fatalf("write config file: %v", err)
+				}
+			}
+
+			if err := LoadConfig(); err != nil {
+				t.Fatalf("LoadConfig() error = %v", err)
+			}
+			if RedisKeyPrefix != tt.want {
+				t.Errorf("RedisKeyPrefix = %q, want %q", RedisKeyPrefix, tt.want)
+			}
+		})
+	}
 }
 
 func TestGetViper(t *testing.T) {
