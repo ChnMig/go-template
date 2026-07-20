@@ -1,3 +1,5 @@
 .agentdocs/*.md
 .claude/*.md
 .claude/*.json
+
+.omo/
