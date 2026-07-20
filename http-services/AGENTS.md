@@ -8,7 +8,8 @@ Gin + Viper + Zap 的 HTTP API 服务模板。仓库是单 Go module：`http-ser
 
 ```text
 http-services/
-├── main.go          # CLI、配置、运行模式、日志、迁移、HTTP server、优雅关闭
+├── main.go          # CLI、版本、信号 context 与进程退出边界
+├── bootstrap/       # 配置初始化、迁移、HTTP 生命周期、PID 与反向清理
 ├── Makefile         # build/run/dev/migrate/test/fmt/lint/verify
 ├── api/             # Gin 初始化、分层路由、中间件、统一响应
 ├── config/          # Viper 加载、默认值、环境变量、热重载、安全校验
@@ -24,7 +25,8 @@ http-services/
 
 | Task | Location | Notes |
 |------|----------|-------|
-| 程序入口/启动顺序 | `main.go` | `LoadConfig -> runmodel.Detect -> log.GetLogger/StartMonitor -> WatchConfig -> CheckConfig -> optional MigrateAll -> api.InitApi` |
+| 程序入口 | `main.go` | CLI、版本输出、signal context 和进程退出；不直接获取应用资源 |
+| 启动顺序/资源清理 | `bootstrap/` | `Initialize -> optional Migrate` 或 `handler -> listener -> PID -> Serve`，退出时反向清理 |
 | 构建/测试/发布 | `Makefile` | 所有本地命令以 Make target 为准 |
 | HTTP 路由/中间件 | `api/` | 见 `api/AGENTS.md` |
 | 配置默认值与热重载 | `config/load.go` | Viper、`HTTP_SERVICES_` env、`parseSize`、`WatchConfig` |
@@ -44,8 +46,9 @@ http-services/
 
 | Symbol | Type | Location | Role |
 |--------|------|----------|------|
-| `main` | func | `main.go` | 单一可执行入口、服务生命周期编排 |
+| `main` | func | `main.go` | 单一可执行入口与进程边界 |
 | `CLI` | var | `main.go` | Kong flags：`-d/--dev`、`-v/--version`、`-m/--migrate` |
+| `bootstrap.Run` | func | `bootstrap/app.go` | 初始化、迁移或 HTTP 运行、PID 与确定性清理 |
 | `api.InitApi` | func | `api/router.go` | Gin engine、全局中间件、`/api` 挂载 |
 | `config.LoadConfig` | func | `config/load.go` | 默认值、配置文件、环境变量、全局变量应用 |
 | `config.WatchConfig` | func | `config/load.go` | 配置热重载，回调里刷新 logger |
@@ -59,7 +62,9 @@ http-services/
 
 ## CONVENTIONS
 
-- 启动顺序不可调换：运行模式必须在初始化 logger 前设置；logger 初始化后再启动配置热重载。
+- `main.go` 只处理 CLI、信号与退出；资源获取、迁移、HTTP 生命周期和清理放在 `bootstrap/`。
+- 启动顺序不可调换：加载配置后先检测运行模式，再初始化 logger；配置校验通过后才启动热重载、迁移或 HTTP listener。
+- 新增长驻 worker 时由 `bootstrap` 获取并拥有，HTTP 停止入口后 cancel/join worker，再关闭其依赖资源。
 - 配置文件名固定为 `config.yaml`，查找顺序：程序目录、工作目录、`/etc/http-services/`。
 - 环境变量前缀固定 `HTTP_SERVICES_`；层级用 `_` 代替点，如 `HTTP_SERVICES_SERVER_PORT`。
 - `server.pid_file` 相对路径基于程序目录转换为绝对路径。
@@ -129,6 +134,7 @@ Command internals:
 - Table-driven tests appear in config, response, middleware, bcrypt, page parsing.
 - Tests that mutate globals must restore via `t.Cleanup` or equivalent.
 - Root `pidfile_integration_test.go` builds and runs a real binary; it must support `testing.Short()` skip.
+- `bootstrap/` tests use injected initialization, listener, server, PID and cleanup seams; no real signals, ports or sleeps.
 - Only `utils/id/id_test.go` currently has benchmarks.
 
 ## NOTES

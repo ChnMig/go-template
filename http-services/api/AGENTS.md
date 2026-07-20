@@ -48,7 +48,7 @@ TraceID -> AccessLog -> Recovery -> optional IPRateLimit -> SecurityHeaders -> B
 - `Recovery` must use `response.ReturnError(... INTERNAL ...)` so panic responses keep the project envelope.
 - Global rate limit is config-driven: `config.EnableRateLimit`, `GlobalRateLimit`, `GlobalRateBurst`.
 - `BodySizeLimit` is config-driven via parsed `config.MaxBodySize`.
-- Shutdown must call `middleware.CleanupAllLimiters()` from `main.go`.
+- Shutdown must call `middleware.CleanupAllLimiters()` from `bootstrap` cleanup.
 
 ## RESPONSE CONTRACT
 

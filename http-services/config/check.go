@@ -32,9 +32,14 @@ func validateJWTConfig(jwtKey string, jwtExpiration int64) error {
 	return nil
 }
 
-// CheckConfig 校验关键配置项，缺失或不安全则 fatal 并记录日志
+// ValidateConfig 校验关键配置项并向调用方返回错误。
+func ValidateConfig(jwtKey string, jwtExpiration int64) error {
+	return validateJWTConfig(jwtKey, jwtExpiration)
+}
+
+// CheckConfig 校验关键配置项，缺失或不安全则 fatal 并记录日志。
 func CheckConfig(jwtKey string, jwtExpiration int64) {
-	if err := validateJWTConfig(jwtKey, jwtExpiration); err != nil {
+	if err := ValidateConfig(jwtKey, jwtExpiration); err != nil {
 		zap.L().Fatal("关键配置校验失败", zap.Error(err))
 	}
 }

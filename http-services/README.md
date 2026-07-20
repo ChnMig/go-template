@@ -13,6 +13,7 @@
 - ✅ **响应规范化** - 统一的 API 响应格式，符合 Google API 设计指南
 - ✅ **跨域支持** - 内置 CORS 中间件
 - ✅ **优雅关闭** - 支持信号监听和优雅退出，自动清理资源
+- ✅ **可测试启动生命周期** - bootstrap 统一管理迁移、监听、PID 与反向清理
 - ✅ **健康检查** - 单一健康检查端点
 - ✅ **DTO 实体隔离** - 所有接口返回实体通过 DTO 与内部模型解耦，防止直接暴露数据库结构
 
@@ -20,6 +21,7 @@
 
 ```
 http-services/
+├── bootstrap/            # 应用组装与生命周期：初始化、迁移、HTTP、PID、清理
 ├── api/                    # API 相关代码
 │   ├── app/               # 业务处理（按版本与分组组织）
 │   │   └── v1/
@@ -76,7 +78,7 @@ http-services/
 ├── config.yaml.example   # 配置文件示例
 ├── go.mod                # Go module 定义
 ├── go.sum                # Go module 校验文件
-├── main.go               # 程序入口
+├── main.go               # CLI、版本、信号 context 与进程退出边界
 ├── Makefile              # 构建脚本
 └── README.md             # 项目文档
 
@@ -87,6 +89,7 @@ http-services/
 模板建议按下面的边界扩展。当前模板的路由样例位于 `api/app/v1/open/health`，私有接口预留在 `api/app/v1/private`。`go-template/http-services` 已内置基础持久化组件，`common/`、`services/` 仍主要作为扩展占位，真实项目可以在这些目录里继续扩展共享语义和后台任务实现。
 
 - `api/`：传输层，负责 Gin 路由、中间件、请求 DTO、响应 DTO 与领域错误到接口响应的映射，不承载核心业务规则。
+- `bootstrap/`：应用组装与生命周期层，负责初始化配置/日志、可选迁移、listener/PID、HTTP 运行和资源反向清理；业务规则不放这里。
 - `domain/`：业务规则层，放状态流转、领域错误、跨模块流程编排等和 HTTP 无关的逻辑。
 - `db/`：持久化适配层，放数据库客户端、模型、查询封装、数据库常量和迁移入口。模板已内置 MySQL/GORM 与 Redis 基础 client，真实项目可继续按 MySQL、Redis 等适配器拆分。
 - `services/`：长驻服务和后台任务层，放 cron、消息队列 consumer/producer、worker 等运行期任务。模板当前预留 `services/cron/` 占位。
