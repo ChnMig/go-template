@@ -13,10 +13,11 @@ OUTPUT_NAME := $(if $(BIN_NAME),$(BIN_NAME),$(BINARY_NAME))
 
 # 跨平台构建矩阵与产物目录
 PLATFORMS ?= linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64
-DIST_DIR := dist
+DIST_DIR ?= dist
 CGO_ENABLED ?= 0
 # 额外随包文件（存在才会被复制）
 PACKAGE_FILES ?= README.md config.yaml.example
+PACKAGE_DIRS ?= static
 
 help: ## 显示帮助信息
 	@echo "可用命令:"
@@ -49,6 +50,9 @@ build-cross: clean-dist ## 跨平台构建并打包到 dist/
 	    go build -trimpath -ldflags "$(LDFLAGS) -s -w" -o "$$OUT_DIR/$(OUTPUT_NAME)$$EXT" .; \
 	  for f in $(PACKAGE_FILES); do \
 	    [ -f "$$f" ] && cp "$$f" "$$OUT_DIR/" || true; \
+	  done; \
+	  for d in $(PACKAGE_DIRS); do \
+	    [ -d "$$d" ] && cp -R "$$d" "$$OUT_DIR/" || true; \
 	  done; \
 	  if command -v zip >/dev/null 2>&1 && [ "$$OS" = "windows" ]; then \
 	    (cd "$(DIST_DIR)" && zip -q -r "$(OUTPUT_NAME)_$(VERSION)_$${OS}_$${ARCH}.zip" "$$(basename "$$OUT_DIR")"); \

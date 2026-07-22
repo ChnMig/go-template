@@ -12,7 +12,7 @@ http-services/
 ├── bootstrap/       # 配置初始化、迁移、HTTP 生命周期、PID 与反向清理
 ├── Makefile         # build/run/dev/migrate/test/fmt/lint/verify
 ├── api/             # Gin 初始化、分层路由、中间件、统一响应
-├── config/          # Viper 加载、默认值、环境变量、热重载、安全校验
+├── config/          # Viper 加载、启动快照、日志专属热更新和安全校验
 ├── common/          # 跨模块共享业务语义预留，如枚举、常量、跨模块 DTO、事件定义
 ├── domain/health/   # 当前唯一领域模块
 ├── db/              # 持久化适配层；msqldb/rdb 放 client、模型、查询 helper、数据库常量、迁移与缓存访问
@@ -29,9 +29,9 @@ http-services/
 | 启动顺序/资源清理 | `bootstrap/` | `Initialize -> optional Migrate` 或 `handler -> listener -> PID -> Serve`，退出时反向清理 |
 | 构建/测试/发布 | `Makefile` | 所有本地命令以 Make target 为准 |
 | HTTP 路由/中间件 | `api/` | 见 `api/AGENTS.md` |
-| 配置默认值与热重载 | `config/load.go` | Viper、`HTTP_SERVICES_` env、`parseSize`、`WatchConfig` |
+| 配置加载与日志热更新 | `config/load.go` | Viper、`HTTP_SERVICES_` env、启动值解析、日志专属 `WatchConfig` |
 | 配置安全门禁 | `config/check.go` | JWT key 非空、非示例值、长度至少 32 |
-| 全局配置变量 | `config/config.go` | `ListenPort`、超时、限流、日志、分页默认值 |
+| 配置快照与兼容变量 | `config/config.go` | 启动期 `HTTPConfig`、并发安全 `LogConfig`、既有全局配置 |
 | 日志生命周期 | `utils/log/log.go` | dev/release 分流、Gin 日志独立文件、轮转、热重建 |
 | JWT 签发/解析 | `utils/authentication/jwt.go` | 直接读取 `config.JWTKey/JWTExpiration` |
 | Context key | `utils/contextkey/keys.go` | trace_id、logger、jwtData、bound params 统一 key |
@@ -49,13 +49,14 @@ http-services/
 | `main` | func | `main.go` | 单一可执行入口与进程边界 |
 | `CLI` | var | `main.go` | Kong flags：`-d/--dev`、`-v/--version`、`-m/--migrate` |
 | `bootstrap.Run` | func | `bootstrap/app.go` | 初始化、迁移或 HTTP 运行、PID 与确定性清理 |
-| `api.InitApi` | func | `api/router.go` | Gin engine、全局中间件、`/api` 挂载 |
+| `api.NewRouter` | func | `api/router.go` | 显式注入配置、logger、Trace factory、registrar，返回构建错误 |
+| `api.InitApi` | func | `api/router.go` | 旧调用方兼容入口；生产 bootstrap 不使用 |
 | `config.LoadConfig` | func | `config/load.go` | 默认值、配置文件、环境变量、全局变量应用 |
-| `config.WatchConfig` | func | `config/load.go` | 配置热重载，回调里刷新 logger |
+| `config.WatchConfig` | func | `config/load.go` | 只热更新 `LogConfig`，回调里刷新 logger |
 | `config.CheckConfig` | func | `config/check.go` | JWT 配置安全校验 |
 | `log.SetLogger` | func | `utils/log/log.go` | 按运行模式和日志级别重建业务/Gin logger |
 | `taskgroup.Run` | func | `utils/taskgroup/taskgroup.go` | 执行命名并发任务，等待全部退出并按输入顺序返回错误 |
-| `middleware.CleanupAllLimiters` | func | `api/middleware/rate-limit.go` | 服务退出时清理限流器 goroutine |
+| `middleware.NewRateLimiter` | func | `api/middleware/rate-limit.go` | 创建有界、惰性 TTL 清理且无后台 goroutine 的限流器 |
 | `db.MigrateAll` | func | `db/migrate.go` | 顶层数据库迁移聚合入口 |
 | `msqldb.GetClient` | func | `db/msqldb/client.go` | 懒初始化 GORM MySQL client |
 | `rdb.GetClient` | func | `db/rdb/client.go` | 懒初始化 Redis client |
@@ -64,11 +65,14 @@ http-services/
 
 - `main.go` 只处理 CLI、信号与退出；资源获取、迁移、HTTP 生命周期和清理放在 `bootstrap/`。
 - 启动顺序不可调换：加载配置后先检测运行模式，再初始化 logger；配置校验通过后才启动热重载、迁移或 HTTP listener。
+- HTTP、生命周期、JWT、数据库和 Redis 配置加载后保持不变；watcher 只能更新 `config.LogConfig`。
+- bootstrap 必须通过 `api.NewRouter(api.DefaultOptions(runtimeConfig.HTTP))` 构建 handler，并在 listener/PID 之前传播错误。
 - 新增长驻 worker 时由 `bootstrap` 获取并拥有，HTTP 停止入口后 cancel/join worker，再关闭其依赖资源。
 - 配置文件名固定为 `config.yaml`，查找顺序：程序目录、工作目录、`/etc/http-services/`。
 - 环境变量前缀固定 `HTTP_SERVICES_`；层级用 `_` 代替点，如 `HTTP_SERVICES_SERVER_PORT`。
 - `server.pid_file` 相对路径基于程序目录转换为绝对路径。
 - `max_body_size` 支持 `B/KB/K/MB/M/GB/G`；非法单位会让配置加载失败。
+- `server.trusted_proxies` 只接受明确的 IP/CIDR；`static_dir` 为空会关闭 static 托管，`enable_cors` 控制默认 CORS。
 - Dev 日志输出到终端；Release 日志输出到 `log/<程序名>.log` 与 `log/<程序名>.gin.log`。
 - `log.gin_level` 为空时跟随 `log.level`；配置热重载后 logger 自动刷新。
 - `api/` 只处理 HTTP 入参、DTO、响应和错误翻译；核心业务规则放 `domain/`。
@@ -98,6 +102,7 @@ http-services/
 - 不要提交真实 `config.yaml` 或密钥；JWT key 必须至少 32 字符且不能使用示例值。
 - 不要重新引入服务内 TLS/ACME 作为默认能力；当前服务只监听 HTTP，TLS 由反向代理/Ingress/负载均衡终止。
 - 不要在 `vendor/` 下写项目规范或修改第三方代码。
+- 不要在 access/recovery 日志记录 query、请求体、Authorization、Cookie、panic value 或其他凭据。
 
 ## COMMANDS
 

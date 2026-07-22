@@ -4,10 +4,30 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
 
 	"http-services/utils/pathtool"
 )
+
+// HTTPConfig 是 Router 构建时使用的启动期不可变配置快照。
+type HTTPConfig struct {
+	StaticDir       string
+	TrustedProxies  []string
+	MaxBodySize     int64
+	GlobalRateLimit int
+	GlobalRateBurst int
+	EnableCORS      bool
+	EnableRateLimit bool
+}
+
+// LogConfig 是允许热更新的日志配置快照。
+type LogConfig struct {
+	MaxSize  int
+	MaxAge   int
+	Level    string
+	GinLevel string
+}
 
 // Here are some basic configurations
 // These configurations are usually generic
@@ -28,6 +48,38 @@ var (
 	LogModelDev = "dev"                                                  // dev model
 )
 
+var (
+	logConfigMu      sync.RWMutex
+	runtimeLogConfig = LogConfig{MaxSize: 50, MaxAge: 30, Level: "info"}
+)
+
+// SnapshotHTTPConfig 复制当前启动配置，避免 Router 持有可变切片。
+func SnapshotHTTPConfig() HTTPConfig {
+	return HTTPConfig{
+		StaticDir:       StaticDir,
+		TrustedProxies:  append([]string(nil), TrustedProxies...),
+		MaxBodySize:     MaxBodySize,
+		GlobalRateLimit: GlobalRateLimit,
+		GlobalRateBurst: GlobalRateBurst,
+		EnableCORS:      EnableCORS,
+		EnableRateLimit: EnableRateLimit,
+	}
+}
+
+// CurrentLogConfig 返回并发安全的日志配置快照。
+func CurrentLogConfig() LogConfig {
+	logConfigMu.RLock()
+	defer logConfigMu.RUnlock()
+	return runtimeLogConfig
+}
+
+// UpdateLogConfig 原子替换日志配置，供 watcher 和受控调用方使用。
+func UpdateLogConfig(next LogConfig) {
+	logConfigMu.Lock()
+	runtimeLogConfig = next
+	logConfigMu.Unlock()
+}
+
 // 从配置文件加载的配置变量
 var (
 	// JWT
@@ -44,6 +96,9 @@ var (
 	EnableRateLimit bool          // 是否启用全局限流
 	GlobalRateLimit int           // 全局限流速率（每秒请求数）
 	GlobalRateBurst int           // 全局限流突发容量
+	StaticDir       string        // static 公开资源目录；空值表示关闭
+	TrustedProxies  []string      // 可信反向代理 IP 或 CIDR
+	EnableCORS      bool          // 是否启用全局 CORS
 	PidFile         string        // pid 文件路径（支持相对路径，相对 AbsPath）
 
 	// Log

@@ -2,10 +2,10 @@ package config
 
 import (
 	"fmt"
+	"net"
 	"path/filepath"
 	"strings"
 
-	"github.com/fsnotify/fsnotify"
 	"github.com/spf13/viper"
 	"go.uber.org/zap"
 )
@@ -63,6 +63,9 @@ func setDefaults() {
 	v.SetDefault("server.enable_rate_limit", false)
 	v.SetDefault("server.global_rate_limit", 100)
 	v.SetDefault("server.global_rate_burst", 200)
+	v.SetDefault("server.static_dir", "static")
+	v.SetDefault("server.trusted_proxies", []string{"127.0.0.1", "::1"})
+	v.SetDefault("server.enable_cors", true)
 	v.SetDefault("server.pid_file", "http-services.pid")
 
 	// JWT 默认配置
@@ -108,6 +111,12 @@ func applyConfig() error {
 	EnableRateLimit = v.GetBool("server.enable_rate_limit")
 	GlobalRateLimit = v.GetInt("server.global_rate_limit")
 	GlobalRateBurst = v.GetInt("server.global_rate_burst")
+	StaticDir = strings.TrimSpace(v.GetString("server.static_dir"))
+	TrustedProxies = configuredStringSlice("server.trusted_proxies")
+	EnableCORS = v.GetBool("server.enable_cors")
+	if err := SnapshotHTTPConfig().Validate(); err != nil {
+		return err
+	}
 
 	// pid 文件（相对路径基于程序所在目录）
 	PidFile = v.GetString("server.pid_file")
@@ -124,6 +133,7 @@ func applyConfig() error {
 	LogMaxAge = v.GetInt("log.max_age")
 	LogLevel = v.GetString("log.level")
 	GinLogLevel = v.GetString("log.gin_level")
+	UpdateLogConfig(logConfigFromViper())
 
 	// Database 配置
 	MysqlDSN = v.GetString("database.mysql_dsn")
@@ -136,28 +146,68 @@ func applyConfig() error {
 	return nil
 }
 
-// WatchConfig 监听配置文件变化并自动重新加载（热重载）
-func WatchConfig(onChange func()) {
-	v.WatchConfig()
-	v.OnConfigChange(func(e fsnotify.Event) {
-		zap.L().Info("Config file changed, reloading...",
-			zap.String("file", e.Name),
-			zap.String("op", e.Op.String()),
-		)
+// Validate 校验 Router 可以安全使用的 HTTP 配置快照。
+func (httpConfig HTTPConfig) Validate() error {
+	if err := validateStaticDir(httpConfig.StaticDir); err != nil {
+		return err
+	}
+	if err := validateTrustedProxies(httpConfig.TrustedProxies); err != nil {
+		return err
+	}
+	if httpConfig.EnableRateLimit && (httpConfig.GlobalRateLimit <= 0 || httpConfig.GlobalRateBurst <= 0) {
+		return fmt.Errorf("enabled rate limit requires positive rate and burst")
+	}
+	return nil
+}
 
-		// 重新应用配置
-		if err := applyConfig(); err != nil {
-			zap.L().Error("Failed to reload config", zap.Error(err))
-			return
+func logConfigFromViper() LogConfig {
+	return LogConfig{
+		MaxSize:  v.GetInt("log.max_size"),
+		MaxAge:   v.GetInt("log.max_age"),
+		Level:    strings.TrimSpace(v.GetString("log.level")),
+		GinLevel: strings.TrimSpace(v.GetString("log.gin_level")),
+	}
+}
+
+func applyReloadableLogConfig() {
+	UpdateLogConfig(logConfigFromViper())
+}
+
+func validateStaticDir(directory string) error {
+	if directory == "" {
+		return nil
+	}
+	cleaned := filepath.Clean(directory)
+	if cleaned == "." || cleaned == string(filepath.Separator) {
+		return fmt.Errorf("static directory must not expose the working directory or filesystem root")
+	}
+	return nil
+}
+
+func validateTrustedProxies(proxies []string) error {
+	for _, proxy := range proxies {
+		if net.ParseIP(proxy) != nil {
+			continue
 		}
-
-		// 执行回调
-		if onChange != nil {
-			onChange()
+		if _, _, err := net.ParseCIDR(proxy); err != nil {
+			return fmt.Errorf("invalid trusted proxy %q: %w", proxy, err)
 		}
+	}
+	return nil
+}
 
-		zap.L().Info("Config reloaded successfully")
-	})
+func configuredStringSlice(key string) []string {
+	values := v.GetStringSlice(key)
+	if len(values) == 1 && strings.Contains(values[0], ",") {
+		values = strings.Split(values[0], ",")
+	}
+	result := make([]string, 0, len(values))
+	for _, value := range values {
+		if trimmed := strings.TrimSpace(value); trimmed != "" {
+			result = append(result, trimmed)
+		}
+	}
+	return result
 }
 
 // GetViper 返回 Viper 实例（用于高级用法）

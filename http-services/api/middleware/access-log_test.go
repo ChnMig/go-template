@@ -21,8 +21,7 @@ func TestAccessLogWritesStructuredSummaryFields(t *testing.T) {
 
 	oldStdout := os.Stdout
 	oldRunModel := config.RunModel
-	oldLogLevel := config.LogLevel
-	oldGinLogLevel := config.GinLogLevel
+	oldLogConfig := config.CurrentLogConfig()
 
 	readPipe, writePipe, err := os.Pipe()
 	if err != nil {
@@ -33,8 +32,7 @@ func TestAccessLogWritesStructuredSummaryFields(t *testing.T) {
 	restoreGlobals := func() {
 		os.Stdout = oldStdout
 		config.RunModel = oldRunModel
-		config.LogLevel = oldLogLevel
-		config.GinLogLevel = oldGinLogLevel
+		config.UpdateLogConfig(oldLogConfig)
 		httplog.SetLogger()
 	}
 	restore := func() {
@@ -50,8 +48,7 @@ func TestAccessLogWritesStructuredSummaryFields(t *testing.T) {
 
 	os.Stdout = writePipe
 	config.RunModel = config.RunModelDevValue
-	config.LogLevel = "info"
-	config.GinLogLevel = "info"
+	config.UpdateLogConfig(config.LogConfig{MaxSize: 50, MaxAge: 30, Level: "info", GinLevel: "info"})
 	httplog.SetLogger()
 
 	router := gin.New()
@@ -60,7 +57,9 @@ func TestAccessLogWritesStructuredSummaryFields(t *testing.T) {
 		response.ReturnSuccess(c)
 	})
 
-	req := httptest.NewRequest(http.MethodPost, "/ok?foo=bar", bytes.NewBufferString("secret-body"))
+	req := httptest.NewRequest(http.MethodPost, "/ok?secret_query=query-value", bytes.NewBufferString("secret-body"))
+	req.Header.Set("Authorization", "Bearer secret-token")
+	req.Header.Set("Cookie", "session=secret-cookie")
 	req.Header.Set("User-Agent", "access-log-test")
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
@@ -79,19 +78,21 @@ func TestAccessLogWritesStructuredSummaryFields(t *testing.T) {
 	for _, want := range []string{
 		`"method": "POST"`,
 		`"path": "/ok"`,
-		`"raw_query": "foo=bar"`,
 		`"status": 200`,
+		`"response_bytes":`,
 		`"latency":`,
 		`"client_ip":`,
-		`"user_agent": "access-log-test"`,
 		`"trace_id":`,
-		`"error": ""`,
 	} {
 		if !strings.Contains(output, want) {
 			t.Fatalf("access log output missing %s: %s", want, output)
 		}
 	}
-	if strings.Contains(output, "secret-body") {
-		t.Fatalf("access log output should not contain request body: %s", output)
+	for _, forbidden := range []string{
+		"secret_query", "query-value", "secret-body", "secret-token", "secret-cookie", "access-log-test", "raw_query",
+	} {
+		if strings.Contains(output, forbidden) {
+			t.Fatalf("access log output leaked %q: %s", forbidden, output)
+		}
 	}
 }

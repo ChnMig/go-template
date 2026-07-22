@@ -7,7 +7,6 @@ import (
 	"reflect"
 
 	"http-services/api"
-	"http-services/api/middleware"
 	"http-services/config"
 	"http-services/db"
 	"http-services/db/msqldb"
@@ -28,12 +27,14 @@ func defaultDependencies() Dependencies {
 	return Dependencies{
 		Initialize: initializeRuntime,
 		Migrate:    db.MigrateAll,
-		NewHandler: func() http.Handler { return api.InitApi() },
-		NewServer:  newHTTPServer,
-		Listen:     net.Listen,
-		WritePID:   pidfile.Write,
-		RemovePID:  pidfile.Remove,
-		Cleanup:    cleanupRuntime,
+		NewHandler: func(runtimeConfig RuntimeConfig) (http.Handler, error) {
+			return api.NewRouter(api.DefaultOptions(runtimeConfig.HTTP))
+		},
+		NewServer: newHTTPServer,
+		Listen:    net.Listen,
+		WritePID:  pidfile.Write,
+		RemovePID: pidfile.Remove,
+		Cleanup:   cleanupRuntime,
 	}
 }
 
@@ -53,14 +54,17 @@ func initializeRuntime(development bool) (RuntimeConfig, error) {
 		log.StopMonitor()
 		return RuntimeConfig{}, fmt.Errorf("validate config: %w", err)
 	}
-	config.WatchConfig(func() {
+	if err := config.WatchConfig(func() {
 		log.SetLogger()
-		zap.L().Info("Configuration reloaded",
-			zap.Int("port", config.ListenPort),
-			zap.Duration("jwt_expiration", config.JWTExpiration),
-			zap.Bool("rate_limit_enabled", config.EnableRateLimit),
+		logConfig := config.CurrentLogConfig()
+		zap.L().Info("Log configuration reloaded",
+			zap.String("level", logConfig.Level),
+			zap.String("gin_level", logConfig.GinLevel),
 		)
-	})
+	}); err != nil {
+		log.StopMonitor()
+		return RuntimeConfig{}, fmt.Errorf("watch config: %w", err)
+	}
 
 	return RuntimeConfig{
 		Address:         fmt.Sprintf(":%d", config.ListenPort),
@@ -70,6 +74,7 @@ func initializeRuntime(development bool) (RuntimeConfig, error) {
 		WriteTimeout:    config.WriteTimeout,
 		IdleTimeout:     config.IdleTimeout,
 		MaxHeaderBytes:  config.MaxHeaderBytes,
+		HTTP:            config.SnapshotHTTPConfig(),
 	}, nil
 }
 
@@ -85,7 +90,7 @@ func newHTTPServer(runtimeConfig RuntimeConfig, handler http.Handler) Server {
 }
 
 func cleanupRuntime() {
-	middleware.CleanupAllLimiters()
+	config.StopWatchConfig()
 	msqldb.CloseClient()
 	rdb.CloseClient()
 	log.StopMonitor()

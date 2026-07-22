@@ -2,6 +2,7 @@ package log
 
 import (
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -23,39 +24,42 @@ import (
 var (
 	mu sync.RWMutex
 
-	logger   *zap.Logger
-	loggerLJ *lumberjack.Logger
+	logger     *zap.Logger
+	loggerCore *managedCore
 
 	ginLogger      *zap.Logger
 	ginErrorLogger *zap.Logger
-	ginLoggerLJ    *lumberjack.Logger
+	ginLoggerCore  *managedCore
 
-	monitorDone chan struct{} // 用于停止监控 goroutine
-	rotateDone  chan struct{} // 用于停止按天 Rotate goroutine
+	monitorLifecycleMu sync.Mutex
+	activeMonitor      *monitorRun
 )
 
-// Creating Dev logger
-// DEV mode outputs logs to the terminal and is more readable
-func createDevLogger(level zapcore.Level) *zap.Logger {
+type monitorRun struct {
+	done    chan struct{}
+	stopped chan struct{}
+	wg      sync.WaitGroup
+}
+
+// createDevCore 创建输出到终端的开发模式日志 core。
+func createDevCore(level zapcore.Level) zapcore.Core {
 	encoder := zap.NewDevelopmentEncoderConfig()
-	core := zapcore.NewTee(
+	return zapcore.NewTee(
 		zapcore.NewSamplerWithOptions(
 			zapcore.NewCore(zapcore.NewConsoleEncoder(encoder), os.Stdout, level), time.Second, 4, 1),
 	)
-	return zap.New(core, zap.AddCaller())
 }
 
-// Creating product logger
-// The product pattern outputs logs to a file and is architecturally structured, in json format.
-func createProductLogger(fileName string, level zapcore.Level) (*zap.Logger, *lumberjack.Logger) {
+// createProductCore 创建输出到文件的生产模式日志 core。
+func createProductCore(fileName string, level zapcore.Level, maxSize, maxAge int) (zapcore.Core, *lumberjack.Logger) {
 	fileEncoder := zap.NewProductionEncoderConfig()
 	fileEncoder.EncodeTime = zapcore.ISO8601TimeEncoder
 	lj := &lumberjack.Logger{
 		Filename: fileName,
-		MaxSize:  config.LogMaxSize,
+		MaxSize:  maxSize,
 		// 不限制备份文件数量：只按 max_age 做清理（并保留 max_size 兜底轮转）。
 		MaxBackups: 0,
-		MaxAge:     config.LogMaxAge,
+		MaxAge:     maxAge,
 		LocalTime:  true,
 	}
 	fileWriter := zapcore.AddSync(lj)
@@ -63,44 +67,59 @@ func createProductLogger(fileName string, level zapcore.Level) (*zap.Logger, *lu
 		zapcore.NewSamplerWithOptions(
 			zapcore.NewCore(zapcore.NewJSONEncoder(fileEncoder), fileWriter, level), time.Second, 4, 1),
 	)
-	return zap.New(core, zap.AddCaller()), lj
+	return core, lj
 }
 
 // SetLogger to prevent zap persistence problems after files are deleted
 func SetLogger() {
 	mu.Lock()
 	defer mu.Unlock()
-	businessLevel := parseLogLevel(config.LogLevel)
+	ensureLoggersLocked()
+	logConfig := config.CurrentLogConfig()
+	businessLevel := parseLogLevel(logConfig.Level)
 	ginLevel := businessLevel
-	if strings.TrimSpace(config.GinLogLevel) != "" {
-		ginLevel = parseLogLevel(config.GinLogLevel)
+	if strings.TrimSpace(logConfig.GinLevel) != "" {
+		ginLevel = parseLogLevel(logConfig.GinLevel)
 	}
 
-	// Get log mode
+	var businessCore zapcore.Core
+	var businessCloser io.Closer
+	var accessCore zapcore.Core
+	var accessCloser io.Closer
 	switch {
 	case runmodel.IsDev():
-		logger = createDevLogger(businessLevel)
-		loggerLJ = nil
-
-		ginLogger = createDevLogger(ginLevel).With(zap.String("logger", "gin"))
-		ginErrorLogger = ginLogger.With(zap.String("stream", "stderr"))
-		ginLoggerLJ = nil
+		businessCore = createDevCore(businessLevel)
+		accessCore = createDevCore(ginLevel)
 	case runmodel.IsRelease():
-		logger, loggerLJ = createProductLogger(config.LogPath, businessLevel)
-
-		ginLogger, ginLoggerLJ = createProductLogger(ginLogPath(), ginLevel)
-		ginLogger = ginLogger.With(zap.String("logger", "gin"))
-		ginErrorLogger = ginLogger.With(zap.String("stream", "stderr"))
+		var businessWriter *lumberjack.Logger
+		var accessWriter *lumberjack.Logger
+		businessCore, businessWriter = createProductCore(config.LogPath, businessLevel, logConfig.MaxSize, logConfig.MaxAge)
+		accessCore, accessWriter = createProductCore(ginLogPath(), ginLevel, logConfig.MaxSize, logConfig.MaxAge)
+		businessCloser = businessWriter
+		accessCloser = accessWriter
 	default:
 		// 默认视作开发模式，避免测试/包初始化阶段创建文件与目录
-		logger = createDevLogger(businessLevel)
-		loggerLJ = nil
-
-		ginLogger = createDevLogger(ginLevel).With(zap.String("logger", "gin"))
-		ginErrorLogger = ginLogger.With(zap.String("stream", "stderr"))
-		ginLoggerLJ = nil
+		businessCore = createDevCore(businessLevel)
+		accessCore = createDevCore(ginLevel)
+	}
+	if err := loggerCore.replace(businessCore, businessCloser); err != nil {
+		logger.Warn("close previous business log writer failed", zap.Error(err))
+	}
+	if err := ginLoggerCore.replace(accessCore, accessCloser); err != nil {
+		logger.Warn("close previous gin log writer failed", zap.Error(err))
 	}
 	zap.ReplaceGlobals(logger)
+}
+
+func ensureLoggersLocked() {
+	if loggerCore != nil && ginLoggerCore != nil {
+		return
+	}
+	loggerCore = newManagedCore()
+	ginLoggerCore = newManagedCore()
+	logger = zap.New(loggerCore, zap.AddCaller())
+	ginLogger = zap.New(ginLoggerCore, zap.AddCaller()).With(zap.String("logger", "gin"))
+	ginErrorLogger = ginLogger.With(zap.String("stream", "stderr"))
 }
 
 // Listen to log files
@@ -113,13 +132,24 @@ func monitorFile(done <-chan struct{}) {
 	}
 	defer watcher.Close()
 	// 监控日志目录，避免因日志文件轮转（rename）导致 watcher 失效。
-	err = watcher.Add(config.LogDir)
-	if err != nil {
+	if err = watcher.Add(config.LogDir); err != nil {
 		zap.L().Error("File listening error", zap.Error(err))
+		return
 	}
+	var reopenTimer *time.Timer
+	var reopen <-chan time.Time
+	pendingPaths := make(map[string]struct{})
+	defer func() {
+		if reopenTimer != nil {
+			reopenTimer.Stop()
+		}
+	}()
 	for {
 		select {
-		case event := <-watcher.Events:
+		case event, ok := <-watcher.Events:
+			if !ok {
+				return
+			}
 			if !(event.Has(fsnotify.Remove) || event.Has(fsnotify.Rename)) {
 				continue
 			}
@@ -131,16 +161,33 @@ func monitorFile(done <-chan struct{}) {
 
 			// lumberjack 轮转会先 rename 再创建新文件，这里延迟检查，
 			// 避免对正常轮转误触发 SetLogger。
-			path := event.Name
-			go func() {
-				time.Sleep(300 * time.Millisecond)
-				if _, statErr := os.Stat(path); statErr == nil {
-					return
+			pendingPaths[event.Name] = struct{}{}
+			if reopenTimer == nil {
+				reopenTimer = time.NewTimer(300 * time.Millisecond)
+			} else {
+				if !reopenTimer.Stop() {
+					select {
+					case <-reopenTimer.C:
+					default:
+					}
 				}
-				zap.L().Warn("log file missing, reopening logger", zap.String("path", path))
-				SetLogger()
-			}()
-		case err := <-watcher.Errors:
+				reopenTimer.Reset(300 * time.Millisecond)
+			}
+			reopen = reopenTimer.C
+		case <-reopen:
+			for path := range pendingPaths {
+				if _, statErr := os.Stat(path); statErr != nil {
+					zap.L().Warn("log file missing, reopening logger", zap.String("path", path))
+					SetLogger()
+					break
+				}
+			}
+			clear(pendingPaths)
+			reopen = nil
+		case err, ok := <-watcher.Errors:
+			if !ok {
+				return
+			}
 			zap.L().Error("file listening error", zap.Error(err))
 		case <-done:
 			// 收到停止信号，退出监控
@@ -249,45 +296,57 @@ func init() {
 func StartMonitor() {
 	// 只在生产模式下启动文件监控
 	if runmodel.IsRelease() {
-		mu.Lock()
-		if monitorDone != nil || rotateDone != nil {
-			mu.Unlock()
+		monitorLifecycleMu.Lock()
+		defer monitorLifecycleMu.Unlock()
+		if activeMonitor != nil {
 			return
 		}
-		monitorDone = make(chan struct{})
-		rotateDone = make(chan struct{})
-		mu.Unlock()
-
-		go monitorFile(monitorDone)
-		go rotateDaily(rotateDone)
+		run := &monitorRun{done: make(chan struct{}), stopped: make(chan struct{})}
+		run.wg.Add(2)
+		activeMonitor = run
+		go func() {
+			defer run.wg.Done()
+			monitorFile(run.done)
+		}()
+		go func() {
+			defer run.wg.Done()
+			rotateDaily(run.done)
+		}()
 	}
 }
 
 // StopMonitor 停止日志文件监控并刷新日志缓冲区（应用关闭时调用）
 func StopMonitor() {
+	monitorLifecycleMu.Lock()
+	if activeMonitor != nil {
+		close(activeMonitor.done)
+		activeMonitor.wg.Wait()
+		close(activeMonitor.stopped)
+		activeMonitor = nil
+	}
+	closeLoggers()
+	monitorLifecycleMu.Unlock()
+}
+
+func closeLoggers() {
 	mu.Lock()
-	md := monitorDone
-	rd := rotateDone
-	monitorDone = nil
-	rotateDone = nil
-	bl := logger
-	gl := ginLogger
+	businessCore := loggerCore
+	accessCore := ginLoggerCore
+	logger = nil
+	loggerCore = nil
+	ginLogger = nil
+	ginErrorLogger = nil
+	ginLoggerCore = nil
+	zap.ReplaceGlobals(zap.NewNop())
 	mu.Unlock()
 
-	// 停止后台 goroutine
-	if md != nil {
-		close(md)
+	if businessCore != nil {
+		_ = businessCore.Sync()
+		_ = businessCore.close()
 	}
-	if rd != nil {
-		close(rd)
-	}
-
-	// 刷新日志缓冲区
-	if bl != nil {
-		_ = bl.Sync()
-	}
-	if gl != nil {
-		_ = gl.Sync()
+	if accessCore != nil {
+		_ = accessCore.Sync()
+		_ = accessCore.close()
 	}
 }
 
@@ -322,17 +381,17 @@ func rotateDaily(done <-chan struct{}) {
 
 func rotateAll() {
 	mu.RLock()
-	blj := loggerLJ
-	glj := ginLoggerLJ
+	businessCore := loggerCore
+	accessCore := ginLoggerCore
 	mu.RUnlock()
 
-	if blj != nil {
-		if err := blj.Rotate(); err != nil {
+	if businessCore != nil {
+		if err := businessCore.rotate(); err != nil {
 			zap.L().Warn("rotate business log failed", zap.Error(err))
 		}
 	}
-	if glj != nil {
-		if err := glj.Rotate(); err != nil {
+	if accessCore != nil {
+		if err := accessCore.rotate(); err != nil {
 			zap.L().Warn("rotate gin log failed", zap.Error(err))
 		}
 	}

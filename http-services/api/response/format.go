@@ -21,7 +21,7 @@ func getTraceID(c *gin.Context) string {
 }
 
 func ReturnErrorWithData(c *gin.Context, data responseData, result interface{}) {
-	l := log.WithRequest(c)
+	l := log.FromContext(c)
 	data.Timestamp = time.Now().Unix()
 	data.TraceID = getTraceID(c)
 	data.Detail = result
@@ -33,7 +33,7 @@ func ReturnErrorWithData(c *gin.Context, data responseData, result interface{}) 
 
 // ResponseOk
 func ReturnOk(c *gin.Context, result interface{}) {
-	l := log.WithRequest(c)
+	l := log.FromContext(c)
 	data := OK
 	data.Timestamp = time.Now().Unix()
 	data.TraceID = getTraceID(c)
@@ -46,7 +46,7 @@ func ReturnOk(c *gin.Context, result interface{}) {
 
 // ResponseOkWithTotal
 func ReturnOkWithTotal(c *gin.Context, total int, result interface{}) {
-	l := log.WithRequest(c)
+	l := log.FromContext(c)
 	data := OK
 	data.Timestamp = time.Now().Unix()
 	data.TraceID = getTraceID(c)
@@ -60,7 +60,7 @@ func ReturnOkWithTotal(c *gin.Context, total int, result interface{}) {
 
 // ResponseError
 func ReturnError(c *gin.Context, data responseData, message string) {
-	l := log.WithRequest(c)
+	l := log.FromContext(c)
 	data.Timestamp = time.Now().Unix()
 	data.TraceID = getTraceID(c)
 	if message != "" {
@@ -74,7 +74,7 @@ func ReturnError(c *gin.Context, data responseData, message string) {
 
 // ResponseSuccess
 func ReturnSuccess(c *gin.Context) {
-	l := log.WithRequest(c)
+	l := log.FromContext(c)
 	data := OK
 	data.Timestamp = time.Now().Unix()
 	data.TraceID = getTraceID(c)

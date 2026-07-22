@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"reflect"
 	"time"
+
+	"http-services/config"
 )
 
 var (
@@ -24,6 +26,7 @@ type RuntimeConfig struct {
 	WriteTimeout    time.Duration
 	IdleTimeout     time.Duration
 	MaxHeaderBytes  int
+	HTTP            config.HTTPConfig
 }
 
 // Server 是 bootstrap 管理的最小 HTTP server 接口。
@@ -37,7 +40,7 @@ type Server interface {
 type Dependencies struct {
 	Initialize func(bool) (RuntimeConfig, error)
 	Migrate    func() error
-	NewHandler func() http.Handler
+	NewHandler func(RuntimeConfig) (http.Handler, error)
 	NewServer  func(RuntimeConfig, http.Handler) Server
 	Listen     func(string, string) (net.Listener, error)
 	WritePID   func(string, int) error

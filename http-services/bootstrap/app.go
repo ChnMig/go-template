@@ -34,7 +34,10 @@ func Run(ctx context.Context, options Options) error {
 		return nil
 	}
 
-	handler := dependencies.NewHandler()
+	handler, err := dependencies.NewHandler(runtimeConfig)
+	if err != nil {
+		return fmt.Errorf("bootstrap build handler: %w", err)
+	}
 	if isNil(handler) {
 		return fmt.Errorf("%w: handler", ErrInvalidDependencies)
 	}

@@ -1,5 +1,7 @@
 package contextkey
 
+import "context"
+
 const (
 	// TraceIDHeader 是请求追踪 ID 的 HTTP header 名称。
 	TraceIDHeader = "X-Trace-ID"
@@ -12,3 +14,16 @@ const (
 	// BoundParams 是 Gin context 中存放已绑定业务参数的 key。
 	BoundParams = "__bound_params__"
 )
+
+type traceIDKey struct{}
+
+// WithTraceID 将追踪 ID 写入标准 context，供非 Gin 的下游调用链读取。
+func WithTraceID(ctx context.Context, traceID string) context.Context {
+	return context.WithValue(ctx, traceIDKey{}, traceID)
+}
+
+// TraceIDFromContext 从标准 context 读取追踪 ID。
+func TraceIDFromContext(ctx context.Context) (string, bool) {
+	traceID, ok := ctx.Value(traceIDKey{}).(string)
+	return traceID, ok && traceID != ""
+}

@@ -14,17 +14,29 @@ const (
 )
 
 func TraceID() gin.HandlerFunc {
+	return TraceIDWithDependencies(id.GenerateID, zap.L)
+}
+
+// TraceIDWithDependencies 使用显式依赖注入追踪 ID factory 和上下文 logger。
+func TraceIDWithDependencies(factory TraceIDFactory, loggerProvider LoggerProvider) gin.HandlerFunc {
+	if factory == nil {
+		factory = id.GenerateID
+	}
 	return func(c *gin.Context) {
 		traceID := c.GetHeader(TraceIDHeaderKey)
-		if traceID == "" {
-			traceID = id.GenerateID()
+		if !validTraceID(traceID) {
+			traceID = factory()
+			if !validTraceID(traceID) {
+				traceID = id.GenerateID()
+			}
 		}
 
 		c.Set(TraceIDContextKey, traceID)
+		c.Request = c.Request.WithContext(contextkey.WithTraceID(c.Request.Context(), traceID))
 		c.Header(TraceIDHeaderKey, traceID)
 
 		// 创建带上下文信息的 logger 并存入 context
-		contextLogger := zap.L().With(
+		contextLogger := loggerFromProvider(loggerProvider).With(
 			zap.String("trace_id", traceID),
 			zap.String("method", c.Request.Method),
 			zap.String("path", c.Request.URL.Path),
@@ -42,4 +54,18 @@ func TraceID() gin.HandlerFunc {
 			zap.Int("status_code", c.Writer.Status()),
 		)
 	}
+}
+
+func validTraceID(traceID string) bool {
+	if len(traceID) != 32 {
+		return false
+	}
+	for _, character := range traceID {
+		if character < '0' || character > '9' {
+			if character < 'a' || character > 'f' {
+				return false
+			}
+		}
+	}
+	return true
 }

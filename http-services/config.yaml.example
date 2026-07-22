@@ -20,6 +20,13 @@ server:
 
   # 服务进程只提供 HTTP。HTTPS/TLS 建议由 Caddy、Nginx、Ingress 等反向代理统一处理。
 
+  # HTTP 基础设施
+  static_dir: "static"                 # /static 的公开资源目录；留空可关闭 static 托管
+  trusted_proxies:                     # 仅填写实际反向代理 IP/CIDR；不要配置 0.0.0.0/0
+    - "127.0.0.1"
+    - "::1"
+  enable_cors: true                    # 是否启用默认 CORS；预检请求直接返回 204
+
   # 请求限制配置
   max_body_size: "10MB"           # 请求体大小限制，支持 KB/MB/GB
   max_header_bytes: 1048576       # 请求头大小限制（字节），默认 1MB
@@ -48,6 +55,7 @@ redis:
   key_prefix: ""          # 公共 key 前缀；非空时必须以 : 结尾，例如 service:env:
 
 log:
+  # 只有 log 配置支持运行期热更新；其他配置修改后必须重启
   max_size: 50      # 单个日志文件最大大小（MB）
   max_age: 30       # 保留旧日志文件的最大天数
   level: "info"     # 业务日志级别: debug, info, warn, error

@@ -16,6 +16,7 @@ var (
 	errMigrate  = errors.New("migration failed")
 	errServe    = errors.New("serve failed")
 	errShutdown = errors.New("shutdown failed")
+	errHandler  = errors.New("handler failed")
 )
 
 func TestRunMigrationInitializesMigratesAndCleansUp(t *testing.T) {
@@ -31,6 +32,21 @@ func TestRunMigrationInitializesMigratesAndCleansUp(t *testing.T) {
 		t.Fatalf("Run() error = %v, want %v", err, errMigrate)
 	}
 	fixture.requireEvents(t, "initialize", "migrate", "cleanup")
+}
+
+func TestRunHandlerFailureDoesNotStartServerOrListener(t *testing.T) {
+	// Given
+	fixture := newFixture()
+	fixture.handlerErr = errHandler
+
+	// When
+	err := Run(t.Context(), Options{PID: 42, Dependencies: fixture.dependencies()})
+
+	// Then
+	if !errors.Is(err, errHandler) {
+		t.Fatalf("Run() error = %v, want %v", err, errHandler)
+	}
+	fixture.requireEvents(t, "initialize", "handler", "cleanup")
 }
 
 func TestRunListenerFailureDoesNotWritePID(t *testing.T) {
@@ -127,6 +143,7 @@ type fixture struct {
 	listenErr  error
 	pidErr     error
 	migrateErr error
+	handlerErr error
 	listener   *fakeListener
 	server     *fakeServer
 }
@@ -144,9 +161,12 @@ func (f *fixture) dependencies() Dependencies {
 			f.record("initialize")
 			return RuntimeConfig{Address: "127.0.0.1:0", PIDFile: "service.pid", ShutdownTimeout: time.Second}, nil
 		},
-		Migrate:    func() error { f.record("migrate"); return f.migrateErr },
-		NewHandler: func() http.Handler { f.record("handler"); return http.NewServeMux() },
-		NewServer:  func(RuntimeConfig, http.Handler) Server { f.record("server"); return f.server },
+		Migrate: func() error { f.record("migrate"); return f.migrateErr },
+		NewHandler: func(RuntimeConfig) (http.Handler, error) {
+			f.record("handler")
+			return http.NewServeMux(), f.handlerErr
+		},
+		NewServer: func(RuntimeConfig, http.Handler) Server { f.record("server"); return f.server },
 		Listen: func(string, string) (net.Listener, error) {
 			f.record("listen")
 			return f.listener, f.listenErr

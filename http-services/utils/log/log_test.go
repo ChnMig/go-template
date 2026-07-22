@@ -16,19 +16,13 @@ func TestSetLogger_UsesIndependentGinLogLevel(t *testing.T) {
 	oldLogDir := config.LogDir
 	oldLogPath := config.LogPath
 	oldSelfName := config.SelfName
-	oldLogMaxSize := config.LogMaxSize
-	oldLogMaxAge := config.LogMaxAge
-	oldLogLevel := config.LogLevel
-	oldGinLogLevel := config.GinLogLevel
+	oldLogConfig := config.CurrentLogConfig()
 	t.Cleanup(func() {
 		config.RunModel = oldRunModel
 		config.LogDir = oldLogDir
 		config.LogPath = oldLogPath
 		config.SelfName = oldSelfName
-		config.LogMaxSize = oldLogMaxSize
-		config.LogMaxAge = oldLogMaxAge
-		config.LogLevel = oldLogLevel
-		config.GinLogLevel = oldGinLogLevel
+		config.UpdateLogConfig(oldLogConfig)
 		SetLogger()
 	})
 
@@ -36,10 +30,7 @@ func TestSetLogger_UsesIndependentGinLogLevel(t *testing.T) {
 	config.LogDir = tempDir
 	config.SelfName = "http-services-test"
 	config.LogPath = filepath.Join(tempDir, "app.log")
-	config.LogMaxSize = 1
-	config.LogMaxAge = 1
-	config.LogLevel = "warn"
-	config.GinLogLevel = "info"
+	config.UpdateLogConfig(config.LogConfig{MaxSize: 1, MaxAge: 1, Level: "warn", GinLevel: "info"})
 
 	SetLogger()
 
@@ -63,19 +54,13 @@ func TestSetLogger_EmptyGinLogLevelFallsBackToBusinessLevel(t *testing.T) {
 	oldLogDir := config.LogDir
 	oldLogPath := config.LogPath
 	oldSelfName := config.SelfName
-	oldLogMaxSize := config.LogMaxSize
-	oldLogMaxAge := config.LogMaxAge
-	oldLogLevel := config.LogLevel
-	oldGinLogLevel := config.GinLogLevel
+	oldLogConfig := config.CurrentLogConfig()
 	t.Cleanup(func() {
 		config.RunModel = oldRunModel
 		config.LogDir = oldLogDir
 		config.LogPath = oldLogPath
 		config.SelfName = oldSelfName
-		config.LogMaxSize = oldLogMaxSize
-		config.LogMaxAge = oldLogMaxAge
-		config.LogLevel = oldLogLevel
-		config.GinLogLevel = oldGinLogLevel
+		config.UpdateLogConfig(oldLogConfig)
 		SetLogger()
 	})
 
@@ -83,10 +68,7 @@ func TestSetLogger_EmptyGinLogLevelFallsBackToBusinessLevel(t *testing.T) {
 	config.LogDir = tempDir
 	config.SelfName = "http-services-test"
 	config.LogPath = filepath.Join(tempDir, "app.log")
-	config.LogMaxSize = 1
-	config.LogMaxAge = 1
-	config.LogLevel = "error"
-	config.GinLogLevel = ""
+	config.UpdateLogConfig(config.LogConfig{MaxSize: 1, MaxAge: 1, Level: "error"})
 
 	SetLogger()
 
@@ -95,5 +77,50 @@ func TestSetLogger_EmptyGinLogLevelFallsBackToBusinessLevel(t *testing.T) {
 	}
 	if ce := GetGinLogger().Check(zap.ErrorLevel, "gin error"); ce == nil {
 		t.Fatal("expected gin logger to allow error level")
+	}
+}
+
+func TestStopMonitorJoinsWorkersAndClosesLoggers(t *testing.T) {
+	StopMonitor()
+	tempDir := t.TempDir()
+	oldRunModel := config.RunModel
+	oldLogDir := config.LogDir
+	oldLogPath := config.LogPath
+	oldSelfName := config.SelfName
+	oldLogConfig := config.CurrentLogConfig()
+	t.Cleanup(func() {
+		config.RunModel = oldRunModel
+		config.LogDir = oldLogDir
+		config.LogPath = oldLogPath
+		config.SelfName = oldSelfName
+		config.UpdateLogConfig(oldLogConfig)
+		SetLogger()
+	})
+
+	config.RunModel = config.RunModelRelease
+	config.LogDir = tempDir
+	config.SelfName = "http-services-test"
+	config.LogPath = filepath.Join(tempDir, "app.log")
+	config.UpdateLogConfig(config.LogConfig{MaxSize: 1, MaxAge: 1, Level: "info"})
+	SetLogger()
+	StartMonitor()
+
+	monitorLifecycleMu.Lock()
+	running := activeMonitor
+	monitorLifecycleMu.Unlock()
+	if running == nil {
+		t.Fatal("monitor was not started")
+	}
+
+	StopMonitor()
+	select {
+	case <-running.stopped:
+	default:
+		t.Fatal("monitor workers were not joined")
+	}
+	mu.RLock()
+	defer mu.RUnlock()
+	if logger != nil || ginLogger != nil || loggerCore != nil || ginLoggerCore != nil {
+		t.Fatal("loggers were not released")
 	}
 }

@@ -52,6 +52,8 @@ func TestSetDefaults(t *testing.T) {
 		{"server port", "server.port", 8080},
 		{"max body size", "server.max_body_size", "10MB"},
 		{"pid file", "server.pid_file", "http-services.pid"},
+		{"static dir", "server.static_dir", "static"},
+		{"enable cors", "server.enable_cors", true},
 		{"jwt expiration", "jwt.expiration", "12h"},
 		{"log max size", "log.max_size", 50},
 		{"enable rate limit", "server.enable_rate_limit", false},
@@ -68,6 +70,9 @@ func TestSetDefaults(t *testing.T) {
 				t.Errorf("default %s = %v, want %v", tt.key, got, tt.want)
 			}
 		})
+	}
+	if got := v.GetStringSlice("server.trusted_proxies"); len(got) != 2 || got[0] != "127.0.0.1" || got[1] != "::1" {
+		t.Fatalf("default server.trusted_proxies = %#v", got)
 	}
 }
 
@@ -98,6 +103,15 @@ func TestApplyConfig(t *testing.T) {
 	if LogMaxSize != 50 {
 		t.Errorf("LogMaxSize = %d, want 50", LogMaxSize)
 	}
+	if StaticDir != "static" {
+		t.Errorf("StaticDir = %q, want static", StaticDir)
+	}
+	if len(TrustedProxies) != 2 || TrustedProxies[0] != "127.0.0.1" || TrustedProxies[1] != "::1" {
+		t.Errorf("TrustedProxies = %#v", TrustedProxies)
+	}
+	if !EnableCORS {
+		t.Error("EnableCORS = false, want true")
+	}
 
 	if MysqlDSN != "" {
 		t.Errorf("MysqlDSN = %q, want empty string", MysqlDSN)
@@ -115,6 +129,9 @@ func TestLoadConfigWithEnv(t *testing.T) {
 	os.Setenv("HTTP_SERVICES_JWT_EXPIRATION", "24h")
 	os.Setenv("HTTP_SERVICES_DATABASE_MYSQL_DSN", "user:pass@tcp(127.0.0.1:3306)/app?charset=utf8mb4&parseTime=True&loc=Local")
 	os.Setenv("HTTP_SERVICES_REDIS_HOST", "127.0.0.1:6380")
+	os.Setenv("HTTP_SERVICES_SERVER_STATIC_DIR", "public")
+	os.Setenv("HTTP_SERVICES_SERVER_TRUSTED_PROXIES", "10.0.0.0/8,192.0.2.10")
+	os.Setenv("HTTP_SERVICES_SERVER_ENABLE_CORS", "false")
 	pidPath := filepath.Join(t.TempDir(), "http-services.pid")
 	os.Setenv("HTTP_SERVICES_SERVER_PID_FILE", pidPath)
 	defer func() {
@@ -122,6 +139,9 @@ func TestLoadConfigWithEnv(t *testing.T) {
 		os.Unsetenv("HTTP_SERVICES_JWT_EXPIRATION")
 		os.Unsetenv("HTTP_SERVICES_DATABASE_MYSQL_DSN")
 		os.Unsetenv("HTTP_SERVICES_REDIS_HOST")
+		os.Unsetenv("HTTP_SERVICES_SERVER_STATIC_DIR")
+		os.Unsetenv("HTTP_SERVICES_SERVER_TRUSTED_PROXIES")
+		os.Unsetenv("HTTP_SERVICES_SERVER_ENABLE_CORS")
 		os.Unsetenv("HTTP_SERVICES_SERVER_PID_FILE")
 	}()
 
@@ -150,6 +170,15 @@ func TestLoadConfigWithEnv(t *testing.T) {
 
 	if RedisHost != "127.0.0.1:6380" {
 		t.Errorf("RedisHost = %q, want 127.0.0.1:6380 (from env)", RedisHost)
+	}
+	if StaticDir != "public" {
+		t.Errorf("StaticDir = %q, want public", StaticDir)
+	}
+	if len(TrustedProxies) != 2 || TrustedProxies[0] != "10.0.0.0/8" || TrustedProxies[1] != "192.0.2.10" {
+		t.Errorf("TrustedProxies = %#v, want env values", TrustedProxies)
+	}
+	if EnableCORS {
+		t.Error("EnableCORS = true, want false from env")
 	}
 
 }
@@ -198,6 +227,58 @@ func TestLoadConfig_RedisKeyPrefix(t *testing.T) {
 			}
 			if RedisKeyPrefix != tt.want {
 				t.Errorf("RedisKeyPrefix = %q, want %q", RedisKeyPrefix, tt.want)
+			}
+		})
+	}
+}
+
+func TestLoadConfigRejectsInvalidTrustedProxy(t *testing.T) {
+	originalAbsPath := AbsPath
+	originalViper := v
+	t.Cleanup(func() {
+		AbsPath = originalAbsPath
+		v = originalViper
+	})
+
+	configDir := t.TempDir()
+	AbsPath = configDir
+	content := []byte("server:\n  trusted_proxies:\n    - not-a-proxy\n")
+	if err := os.WriteFile(filepath.Join(configDir, "config.yaml"), content, 0o600); err != nil {
+		t.Fatalf("write config file: %v", err)
+	}
+
+	if err := LoadConfig(); err == nil {
+		t.Fatal("LoadConfig() error = nil, want invalid trusted proxy error")
+	}
+}
+
+func TestLoadConfigRejectsUnsafeHTTPInfrastructureConfig(t *testing.T) {
+	tests := []struct {
+		name string
+		yaml string
+	}{
+		{name: "working directory as static root", yaml: "server:\n  static_dir: .\n"},
+		{name: "filesystem root as static root", yaml: "server:\n  static_dir: /\n"},
+		{name: "non-positive enabled rate", yaml: "server:\n  enable_rate_limit: true\n  global_rate_limit: 0\n"},
+		{name: "non-positive enabled burst", yaml: "server:\n  enable_rate_limit: true\n  global_rate_burst: 0\n"},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			originalAbsPath := AbsPath
+			originalViper := v
+			t.Cleanup(func() {
+				AbsPath = originalAbsPath
+				v = originalViper
+			})
+
+			configDir := t.TempDir()
+			AbsPath = configDir
+			if err := os.WriteFile(filepath.Join(configDir, "config.yaml"), []byte(test.yaml), 0o600); err != nil {
+				t.Fatalf("write config file: %v", err)
+			}
+			if err := LoadConfig(); err == nil {
+				t.Fatal("LoadConfig() error = nil, want unsafe HTTP infrastructure config error")
 			}
 		})
 	}
