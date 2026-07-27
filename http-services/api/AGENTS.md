@@ -59,7 +59,7 @@ TraceID -> AccessLog -> Recovery -> optional CORS -> optional IPRateLimit -> Sec
 - API success and errors both return HTTP 200; semantic result lives in JSON `code/status/message/detail/total`.
 - All response helpers inject `timestamp` and `trace_id` from context.
 - Use `response.ReturnOk`, `ReturnOkWithTotal`, `ReturnSuccess`, `ReturnError`, or `ReturnErrorWithData`.
-- Response logs contain only `code/status`; error responses return user-friendly messages and never log `detail`.
+- Response logs contain the complete response; error paths additionally preserve captured request inputs and the concrete wrapped error supplied by the API boundary.
 
 ## ANTI-PATTERNS
 
@@ -67,7 +67,7 @@ TraceID -> AccessLog -> Recovery -> optional CORS -> optional IPRateLimit -> Sec
 - Do not reorder `TraceID`, `AccessLog`, `Recovery` without updating tests and documenting why.
 - Do not return raw Gin JSON from normal API handlers; use `api/response` envelope.
 - Do not expose domain or persistence structs in API responses; create DTOs.
-- Do not log query, request bodies, credentials, cookies, panic values, or business error text in global HTTP logs.
+- Do not discard query, request bodies, headers, panic values, response detail, or wrapped business errors from diagnostic error logs.
 - Do not put JWT context keys as string literals; use `utils/contextkey`.
 
 ## TEST NOTES

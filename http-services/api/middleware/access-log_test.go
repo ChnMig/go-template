@@ -21,12 +21,15 @@ type logRecord struct {
 	TraceID       string  `json:"trace_id"`
 	Method        string  `json:"method"`
 	Path          string  `json:"path"`
+	RawQuery      string  `json:"raw_query"`
 	ClientIP      string  `json:"client_ip"`
+	UserAgent     string  `json:"user_agent"`
+	Error         string  `json:"error"`
 	Status        float64 `json:"status"`
 	ResponseBytes float64 `json:"response_bytes"`
 }
 
-func Test_AccessLog_writes_safe_structured_final_status(t *testing.T) {
+func Test_AccessLog_writes_diagnostic_request_metadata(t *testing.T) {
 	// Given
 	var logOutput bytes.Buffer
 	logger := newTestLogger(t, &logOutput)
@@ -39,6 +42,7 @@ func Test_AccessLog_writes_safe_structured_final_status(t *testing.T) {
 	request := httptest.NewRequest(http.MethodPost, "/probe?token=query-secret", strings.NewReader("body-secret"))
 	request.RemoteAddr = "192.0.2.10:4321"
 	request.Header.Set("Authorization", "Bearer header-secret")
+	request.Header.Set("User-Agent", "diagnostic-agent")
 	recorder := httptest.NewRecorder()
 
 	// When
@@ -52,11 +56,10 @@ func Test_AccessLog_writes_safe_structured_final_status(t *testing.T) {
 	require.Equal(t, traceID.String(), accessRecord.TraceID)
 	require.Equal(t, "POST", accessRecord.Method)
 	require.Equal(t, "/probe", accessRecord.Path)
+	require.Equal(t, "token=query-secret", accessRecord.RawQuery)
 	require.Equal(t, "192.0.2.10", accessRecord.ClientIP)
+	require.Equal(t, "diagnostic-agent", accessRecord.UserAgent)
 	require.Equal(t, http.StatusOK, int(accessRecord.Status))
-	require.NotContains(t, logOutput.String(), "query-secret")
-	require.NotContains(t, logOutput.String(), "body-secret")
-	require.NotContains(t, logOutput.String(), "header-secret")
 }
 
 func Test_AccessLog_excludes_health_path(t *testing.T) {

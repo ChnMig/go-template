@@ -56,8 +56,15 @@ func write(c *gin.Context, data responseData, detail interface{}, failed bool) {
 	}
 	c.Data(http.StatusOK, "application/json; charset=utf-8", encoded)
 	c.Abort()
-	logger := log.FromContext(c)
-	fields := []zap.Field{zap.Int("code", data.Code), zap.String("status", data.Status)}
+	logger := log.WithRequest(c)
+	fields := []zap.Field{
+		zap.Int("code", data.Code),
+		zap.String("status", data.Status),
+		zap.Any("response", data),
+	}
+	if requestErrors := c.Errors.ByType(gin.ErrorTypeAny).String(); requestErrors != "" {
+		fields = append(fields, zap.String("error", requestErrors))
+	}
 	if failed {
 		logger.Error("http.response", fields...)
 		return

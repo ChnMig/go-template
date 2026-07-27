@@ -2,12 +2,14 @@ package middleware_test
 
 import (
 	"bytes"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 
 	"http-services/api/middleware"
+	"http-services/config"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -40,11 +42,19 @@ func Test_Recovery_returns_internal_envelope_before_commit(t *testing.T) {
 	router := gin.New()
 	router.Use(middleware.TraceID(func() (uuid.UUID, error) { return traceID, nil }))
 	router.Use(middleware.RecoveryWithLogger(logger))
-	router.GET("/panic", func(*gin.Context) { panic("boom") })
+	router.Use(middleware.BodySizeLimitWithLogger(config.ByteSize(64), logger))
+	router.POST("/panic", func(context *gin.Context) {
+		_, err := io.ReadAll(context.Request.Body)
+		require.NoError(t, err)
+		panic("boom-diagnostic")
+	})
 	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/panic?order_no=ORDER-1", strings.NewReader(`{"amount":100}`))
+	request.Header.Set("Authorization", "Bearer diagnostic-token")
+	request.Header.Set("User-Agent", "diagnostic-agent")
 
 	// When
-	router.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/panic", nil))
+	router.ServeHTTP(recorder, request)
 
 	// Then
 	require.Equal(t, http.StatusOK, recorder.Code)
@@ -54,6 +64,11 @@ func Test_Recovery_returns_internal_envelope_before_commit(t *testing.T) {
 	records := decodeLogRecords(t, logOutput.Bytes())
 	require.Len(t, records, 1)
 	require.Equal(t, http.StatusInternalServerError, int(records[0].Status))
+	for _, expected := range []string{
+		"boom-diagnostic", "order_no=ORDER-1", "Bearer diagnostic-token", "diagnostic-agent", `\"amount\":100`,
+	} {
+		require.Contains(t, logOutput.String(), expected)
+	}
 }
 
 func Test_Recovery_preserves_committed_response_and_logs_once(t *testing.T) {

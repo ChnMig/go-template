@@ -12,7 +12,10 @@ import (
 const (
 	logKeyMethod        = "method"
 	logKeyPath          = "path"
+	logKeyRawQuery      = "raw_query"
 	logKeyClientIP      = "client_ip"
+	logKeyUserAgent     = "user_agent"
+	logKeyError         = "error"
 	logKeyStatus        = "status"
 	logKeyResponseBytes = "response_bytes"
 	logKeyElapsed       = "elapsed"
@@ -20,7 +23,7 @@ const (
 	logKeyStack         = "stack"
 )
 
-// AccessLog records one safe request summary after downstream completion.
+// AccessLog records one diagnostic request summary after downstream completion.
 func AccessLog() gin.HandlerFunc {
 	return AccessLogWithLogger(serviceLog.GetGinLogger)
 }
@@ -41,7 +44,10 @@ func AccessLogWithLogger(loggerProvider LoggerProvider) gin.HandlerFunc {
 				"http.request",
 				zap.String(logKeyMethod, context.Request.Method),
 				zap.String(logKeyPath, context.Request.URL.Path),
+				zap.String(logKeyRawQuery, context.Request.URL.RawQuery),
 				zap.String(logKeyClientIP, context.ClientIP()),
+				zap.String(logKeyUserAgent, context.Request.UserAgent()),
+				zap.String(logKeyError, context.Errors.ByType(gin.ErrorTypeAny).String()),
 				zap.Int(logKeyStatus, context.Writer.Status()),
 				zap.Int(logKeyResponseBytes, responseBytes),
 				zap.Duration(logKeyElapsed, time.Since(startedAt)),

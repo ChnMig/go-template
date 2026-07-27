@@ -13,7 +13,14 @@ const (
 	JWTData = "jwtData"
 	// BoundParams 是 Gin context 中存放已绑定业务参数的 key。
 	BoundParams = "__bound_params__"
+	// RequestBody 是 Gin context 中存放已消费请求体副本的 key。
+	RequestBody = "__request_body__"
 )
+
+// RequestBodyCapture 保存请求处理过程中实际读取的 body，供错误日志使用。
+type RequestBodyCapture struct {
+	Bytes []byte
+}
 
 type traceIDKey struct{}
 

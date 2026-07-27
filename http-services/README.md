@@ -666,7 +666,7 @@ Redis client 初始化时会捕获该前缀，因此修改后必须重启服务�
 
 `server.static_dir` 控制 `/static` 公开资源托管，空值表示关闭；工作目录 `.` 和文件系统根目录 `/` 会被拒绝。该目录中的内容会对外公开，不能放配置、密钥或其他内部文件；跨平台发布包会携带模板的 `static/` 目录。
 
-默认 HTTP 日志只记录 method、path、status、响应字节数、耗时、可信客户端 IP 和 trace ID，不记录 query、请求体、Authorization、Cookie 或 panic 内容。入站 `X-Trace-ID` 只接受 32 位小写十六进制值，非法值会被替换，并同步传入标准 `context.Context`。
+HTTP access 日志记录 method、path、raw query、status、响应字节数、耗时、可信客户端 IP、user agent、trace ID 和 Gin error。错误响应日志还会记录完整 response、headers、表单/路径/已绑定参数、在 `server.max_body_size` 内捕获的已消费请求体，以及 API 边界传入的具体 wrapped error；panic 日志包含 panic value 和调用栈。入站 `X-Trace-ID` 只接受规范 UUID，非法值会被替换，并同步传入标准 `context.Context`。
 
 ### 环境变量覆盖
 
@@ -1014,8 +1014,8 @@ zap.L().Debug("调试信息", zap.Any("data", data))
 log := log.FromContext(c)
 log.Info("处理请求", zap.String("path", c.Request.URL.Path))
 
-// 如需在排查问题时同时记录本次请求的参数（query / 表单 / 路径参数），
-// 可以使用 WithRequest 获取带请求参数字段的 logger：
+// 错误路径使用 WithRequest 记录 query、headers、表单、路径/绑定参数和已消费 body，
+// 并通过 zap.Error 保留完整 wrapped error：
 log := log.WithRequest(c)
 log.Error("处理请求失败", zap.Error(err))
 ```

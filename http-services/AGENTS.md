@@ -103,7 +103,7 @@ http-services/
 - 不要提交真实 `config.yaml` 或密钥；JWT key 必须至少 32 字符且不能使用示例值。
 - 不要重新引入服务内 TLS/ACME 作为默认能力；当前服务只监听 HTTP，TLS 由反向代理/Ingress/负载均衡终止。
 - 不要在 `vendor/` 下写项目规范或修改第三方代码。
-- 不要在 access/recovery 日志记录 query、请求体、Authorization、Cookie、panic value 或其他凭据。
+- 错误日志必须保留具体 wrapped error、完整响应、query、headers、解析参数、路径参数，以及在 `server.max_body_size` 内捕获的已消费请求体。
 
 ## COMMANDS
 
