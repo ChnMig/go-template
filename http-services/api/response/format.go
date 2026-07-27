@@ -1,7 +1,6 @@
 package response
 
 import (
-	"encoding/json"
 	"net/http"
 	"time"
 
@@ -13,56 +12,77 @@ import (
 )
 
 func ReturnErrorWithData(c *gin.Context, data responseData, result interface{}) {
-	write(c, data, result, true)
+	logger := log.WithRequest(c)
+	data.Timestamp = time.Now().Unix()
+	data.TraceID = requestTraceID(c)
+	data.Detail = result
+	c.JSON(http.StatusOK, data)
+	logErrorResponse(logger, "Returning error response with data", data)
+	c.Abort()
 }
 
 // ResponseOk
 func ReturnOk(c *gin.Context, result interface{}) {
-	write(c, OK, result, false)
+	logger := log.WithRequest(c)
+	data := OK
+	data.Timestamp = time.Now().Unix()
+	data.TraceID = requestTraceID(c)
+	data.Detail = result
+	c.JSON(http.StatusOK, data)
+	logger.Debug("Returning OK response", zap.Any("response", data))
+	c.Abort()
 }
 
 // ResponseOkWithTotal
 func ReturnOkWithTotal(c *gin.Context, total int, result interface{}) {
+	logger := log.WithRequest(c)
 	data := OK
+	data.Timestamp = time.Now().Unix()
+	data.TraceID = requestTraceID(c)
+	data.Detail = result
 	data.Total = &total
-	write(c, data, result, false)
+	c.JSON(http.StatusOK, data)
+	logger.Debug("Returning OK response with total", zap.Any("response", data))
+	c.Abort()
 }
 
 // ResponseError
 func ReturnError(c *gin.Context, data responseData, message string) {
+	logger := log.WithRequest(c)
+	data.Timestamp = time.Now().Unix()
+	data.TraceID = requestTraceID(c)
 	if message != "" {
 		data.Message = message
 	}
-	write(c, data, nil, true)
+	c.JSON(http.StatusOK, data)
+	logErrorResponse(logger, "Returning error response", data)
+	c.Abort()
 }
 
 // ResponseSuccess
 func ReturnSuccess(c *gin.Context) {
-	write(c, OK, nil, false)
-}
-
-func write(c *gin.Context, data responseData, detail interface{}, failed bool) {
+	logger := log.WithRequest(c)
+	data := OK
 	data.Timestamp = time.Now().Unix()
 	data.TraceID = requestTraceID(c)
-	data.Detail = detail
-	encoded, err := json.Marshal(data)
-	if err != nil {
-		data = INTERNAL
-		data.Timestamp = time.Now().Unix()
-		data.TraceID = requestTraceID(c)
-		data.Message = "internal server error"
-		encoded, _ = json.Marshal(data)
-		failed = true
-	}
-	c.Data(http.StatusOK, "application/json; charset=utf-8", encoded)
+	c.JSON(http.StatusOK, data)
+	logger.Debug("Returning success response", zap.Any("response", data))
 	c.Abort()
-	logger := log.FromContext(c)
-	fields := []zap.Field{zap.Int("code", data.Code), zap.String("status", data.Status)}
-	if failed {
-		logger.Error("http.response", fields...)
-		return
+}
+
+func logErrorResponse(logger *zap.Logger, message string, data responseData) {
+	if logger == nil {
+		logger = zap.L()
 	}
-	logger.Debug("http.response", fields...)
+	field := zap.Any("response", data)
+	switch {
+	case data.Code == CANCELLED.Code:
+		logger.Debug(message, field)
+	case data.Code >= INTERNAL.Code:
+		logger.Error(message, field)
+	default:
+		logger.Warn(message, field)
+	}
 }
 
 func requestTraceID(c *gin.Context) string {

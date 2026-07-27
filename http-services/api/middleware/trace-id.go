@@ -24,11 +24,6 @@ const (
 
 // TraceID validates or generates a trace identifier and adds it to request context.
 func TraceID() gin.HandlerFunc {
-	return TraceIDWithLogger(zap.L)
-}
-
-// TraceIDWithLogger installs the trace ID and request-scoped logger.
-func TraceIDWithLogger(loggerProvider LoggerProvider) gin.HandlerFunc {
 	return func(context *gin.Context) {
 		traceID := context.GetHeader(TraceIDHeader)
 		parsedTraceID, parseErr := uuid.Parse(traceID)
@@ -45,7 +40,7 @@ func TraceIDWithLogger(loggerProvider LoggerProvider) gin.HandlerFunc {
 		context.Set(contextkey.TraceID, traceID)
 		context.Request = context.Request.WithContext(serviceLog.WithTraceID(context.Request.Context(), traceID))
 		context.Header(TraceIDHeader, traceID)
-		requestLogger := loggerFromProvider(loggerProvider).With(
+		requestLogger := zap.L().With(
 			zap.String("trace_id", traceID),
 			zap.String(logKeyMethod, context.Request.Method),
 			zap.String(logKeyPath, context.Request.URL.Path),

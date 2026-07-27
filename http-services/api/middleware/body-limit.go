@@ -17,7 +17,6 @@ import (
 type bodyLimitReadCloser struct {
 	body    io.ReadCloser
 	context *gin.Context
-	logger  LoggerProvider
 	once    sync.Once
 }
 
@@ -34,7 +33,11 @@ func (reader *bodyLimitReadCloser) Read(buffer []byte) (int, error) {
 			response.ReturnError(reader.context, response.INVALID_ARGUMENT, "request body too large")
 			return
 		}
-		loggerFromContext(reader.context.Request.Context(), reader.logger).Error(
+		logger := serviceLog.GetGinErrorLogger()
+		if traceID, ok := serviceLog.TraceID(reader.context.Request.Context()); ok {
+			logger = logger.With(zap.String("trace_id", traceID))
+		}
+		logger.Error(
 			"http.body_too_large_after_commit",
 			zap.String(logKeyMethod, reader.context.Request.Method),
 			zap.String(logKeyPath, reader.context.Request.URL.Path),
@@ -51,11 +54,6 @@ func (reader *bodyLimitReadCloser) Close() error {
 // BodySizeLimit rejects known oversize requests and aborts streamed overflow at the read boundary.
 // A handler that receives a body-read error must return so the aborted chain can unwind.
 func BodySizeLimit(maxSize config.ByteSize) gin.HandlerFunc {
-	return BodySizeLimitWithLogger(maxSize, serviceLog.GetGinErrorLogger)
-}
-
-// BodySizeLimitWithLogger uses a dynamic global error logger provider.
-func BodySizeLimitWithLogger(maxSize config.ByteSize, loggerProvider LoggerProvider) gin.HandlerFunc {
 	return func(context *gin.Context) {
 		if context.Request.ContentLength > int64(maxSize) {
 			response.ReturnError(context, response.INVALID_ARGUMENT, "request body too large")
@@ -63,9 +61,7 @@ func BodySizeLimitWithLogger(maxSize config.ByteSize, loggerProvider LoggerProvi
 		}
 
 		context.Request.Body = &bodyLimitReadCloser{
-			body:    http.MaxBytesReader(context.Writer, context.Request.Body, int64(maxSize)),
-			context: context,
-			logger:  loggerProvider,
+			body: http.MaxBytesReader(context.Writer, context.Request.Body, int64(maxSize)), context: context,
 		}
 		context.Next()
 	}

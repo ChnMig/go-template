@@ -20,13 +20,8 @@ const (
 	logKeyStack         = "stack"
 )
 
-// AccessLog records one safe request summary after downstream completion.
+// AccessLog records one request summary through the global Gin zap logger.
 func AccessLog() gin.HandlerFunc {
-	return AccessLogWithLogger(serviceLog.GetGinLogger)
-}
-
-// AccessLogWithLogger records access logs through a dynamic global logger provider.
-func AccessLogWithLogger(loggerProvider LoggerProvider) gin.HandlerFunc {
 	return func(context *gin.Context) {
 		startedAt := time.Now()
 		defer func() {
@@ -37,7 +32,11 @@ func AccessLogWithLogger(loggerProvider LoggerProvider) gin.HandlerFunc {
 			if responseBytes < 0 {
 				responseBytes = 0
 			}
-			loggerFromContext(context.Request.Context(), loggerProvider).Info(
+			logger := serviceLog.GetGinLogger()
+			if traceID, ok := serviceLog.TraceID(context.Request.Context()); ok {
+				logger = logger.With(zap.String("trace_id", traceID))
+			}
+			logger.Info(
 				"http.request",
 				zap.String(logKeyMethod, context.Request.Method),
 				zap.String(logKeyPath, context.Request.URL.Path),

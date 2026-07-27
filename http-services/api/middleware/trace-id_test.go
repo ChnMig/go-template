@@ -14,11 +14,12 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func Test_TraceID_stores_safe_request_context_logger(t *testing.T) {
+func Test_TraceID_stores_global_request_context_logger(t *testing.T) {
 	// Given
 	var output bytes.Buffer
+	installGlobalTestLogger(t, &output)
 	router := gin.New()
-	router.Use(middleware.TraceIDWithLogger(newTestLogger(t, &output)))
+	router.Use(middleware.TraceID())
 	router.GET("/probe", func(context *gin.Context) {
 		serviceLog.FromContext(context).Info("handler event")
 		context.Status(http.StatusNoContent)
@@ -32,8 +33,8 @@ func Test_TraceID_stores_safe_request_context_logger(t *testing.T) {
 	generated := recorder.Header().Get(middleware.TraceIDHeader)
 	requireUUIDv7(t, generated)
 	require.Contains(t, output.String(), generated)
-	require.Contains(t, output.String(), `"method":"GET"`)
-	require.Contains(t, output.String(), `"path":"/probe"`)
+	require.Contains(t, output.String(), `"method": "GET"`)
+	require.Contains(t, output.String(), `"path": "/probe"`)
 	require.NotContains(t, output.String(), "secret")
 }
 

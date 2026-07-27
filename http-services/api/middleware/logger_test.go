@@ -5,11 +5,10 @@ import (
 	"encoding/json"
 	"testing"
 
-	"http-services/api/middleware"
+	"http-services/config"
+	serviceLog "http-services/utils/log"
 
 	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
 )
 
 func requireSemanticEnvelope(t *testing.T, body []byte, code int, status string) {
@@ -25,11 +24,11 @@ func requireSemanticEnvelope(t *testing.T, body []byte, code int, status string)
 	require.Positive(t, envelope.Timestamp)
 }
 
-func newTestLogger(t *testing.T, output *bytes.Buffer) middleware.LoggerProvider {
+func installGlobalTestLogger(t *testing.T, output *bytes.Buffer) {
 	t.Helper()
-	encoder := zap.NewProductionEncoderConfig()
-	logger := zap.New(zapcore.NewCore(
-		zapcore.NewJSONEncoder(encoder), zapcore.AddSync(output), zap.DebugLevel,
-	))
-	return func() *zap.Logger { return logger }
+	require.NoError(t, serviceLog.SetLogger(config.LogConfig{
+		MaxSize: config.LogFileSizeMB(1), MaxAge: config.LogRetentionDays(1),
+		Level: config.LogLevelDebug, GinLevel: config.LogLevelDebug,
+	}, true, output))
+	t.Cleanup(func() { require.NoError(t, serviceLog.Close()) })
 }

@@ -2,6 +2,7 @@ package log
 
 import (
 	"context"
+	"net/http"
 
 	"http-services/utils/contextkey"
 
@@ -10,6 +11,9 @@ import (
 )
 
 const traceIDKey = "trace_id"
+
+// BoundParamsKey stores bound business parameters in gin.Context for request logging.
+const BoundParamsKey = "__bound_params__"
 
 // TraceIDHeader carries request correlation across HTTP service boundaries.
 const TraceIDHeader = contextkey.TraceIDHeader
@@ -49,8 +53,39 @@ func FromContext(ctx *gin.Context) *zap.Logger {
 	return GetLogger()
 }
 
-// WithRequest returns the safe request-scoped logger installed by middleware.
-// Query strings, forms, bound values, bodies, and credentials are never added.
+// WithRequest returns the request-scoped logger with the same request fields as the example project.
 func WithRequest(ctx *gin.Context) *zap.Logger {
-	return FromContext(ctx)
+	base := FromContext(ctx)
+	if ctx == nil || ctx.Request == nil {
+		return base
+	}
+
+	fields := []zap.Field{zap.String("method", ctx.Request.Method)}
+	if ctx.Request.URL != nil {
+		fields = append(fields, zap.String("path", ctx.Request.URL.Path))
+		if rawQuery := ctx.Request.URL.RawQuery; rawQuery != "" {
+			fields = append(fields, zap.String("query", rawQuery))
+		}
+	}
+	if ctx.Request.Method == http.MethodPost ||
+		ctx.Request.Method == http.MethodPut ||
+		ctx.Request.Method == http.MethodPatch {
+		if len(ctx.Request.PostForm) > 0 {
+			fields = append(fields, zap.Any("form", ctx.Request.PostForm))
+		}
+		if ctx.Request.MultipartForm != nil && len(ctx.Request.MultipartForm.Value) > 0 {
+			fields = append(fields, zap.Any("multipart_form", ctx.Request.MultipartForm.Value))
+		}
+	}
+	if len(ctx.Params) > 0 {
+		pathParams := make(map[string]string, len(ctx.Params))
+		for _, param := range ctx.Params {
+			pathParams[param.Key] = param.Value
+		}
+		fields = append(fields, zap.Any("path_params", pathParams))
+	}
+	if bound, exists := ctx.Get(BoundParamsKey); exists && bound != nil {
+		fields = append(fields, zap.Any("params", bound))
+	}
+	return base.With(fields...)
 }

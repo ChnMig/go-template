@@ -30,10 +30,10 @@ func (failingReadCloser) Close() error {
 
 func Test_BodySizeLimit_rejects_known_oversize_before_handler(t *testing.T) {
 	// Given
-	logger := newTestLogger(t, &bytes.Buffer{})
+	installGlobalTestLogger(t, &bytes.Buffer{})
 	handlerCalled := false
 	router := gin.New()
-	router.Use(middleware.BodySizeLimitWithLogger(config.ByteSize(4), logger))
+	router.Use(middleware.BodySizeLimit(config.ByteSize(4)))
 	router.POST("/probe", func(context *gin.Context) {
 		handlerCalled = true
 		context.Status(http.StatusNoContent)
@@ -52,10 +52,10 @@ func Test_BodySizeLimit_rejects_known_oversize_before_handler(t *testing.T) {
 
 func Test_BodySizeLimit_converts_propagated_stream_error_before_commit(t *testing.T) {
 	// Given
-	logger := newTestLogger(t, &bytes.Buffer{})
+	installGlobalTestLogger(t, &bytes.Buffer{})
 	handlerCompleted := false
 	router := gin.New()
-	router.Use(middleware.BodySizeLimitWithLogger(config.ByteSize(4), logger))
+	router.Use(middleware.BodySizeLimit(config.ByteSize(4)))
 	router.POST("/probe", func(context *gin.Context) {
 		_, err := io.ReadAll(context.Request.Body)
 		if err != nil {
@@ -79,10 +79,10 @@ func Test_BodySizeLimit_converts_propagated_stream_error_before_commit(t *testin
 
 func Test_BodySizeLimit_aborts_later_handlers_when_stream_read_exceeds_limit(t *testing.T) {
 	// Given
-	logger := newTestLogger(t, &bytes.Buffer{})
+	installGlobalTestLogger(t, &bytes.Buffer{})
 	secondHandlerCalled := false
 	router := gin.New()
-	router.Use(middleware.BodySizeLimitWithLogger(config.ByteSize(4), logger))
+	router.Use(middleware.BodySizeLimit(config.ByteSize(4)))
 	router.POST(
 		"/probe",
 		func(context *gin.Context) {
@@ -110,9 +110,9 @@ func Test_BodySizeLimit_aborts_later_handlers_when_stream_read_exceeds_limit(t *
 func Test_BodySizeLimit_preserves_committed_response_and_logs_once(t *testing.T) {
 	// Given
 	var logOutput bytes.Buffer
-	logger := newTestLogger(t, &logOutput)
+	installGlobalTestLogger(t, &logOutput)
 	router := gin.New()
-	router.Use(middleware.BodySizeLimitWithLogger(config.ByteSize(4), logger))
+	router.Use(middleware.BodySizeLimit(config.ByteSize(4)))
 	router.POST("/probe", func(context *gin.Context) {
 		context.String(http.StatusAccepted, "partial")
 		_, err := io.ReadAll(context.Request.Body)
@@ -130,14 +130,14 @@ func Test_BodySizeLimit_preserves_committed_response_and_logs_once(t *testing.T)
 	// Then
 	require.Equal(t, http.StatusAccepted, recorder.Code)
 	require.Equal(t, "partial", recorder.Body.String())
-	require.Equal(t, 1, strings.Count(logOutput.String(), `"msg":"http.body_too_large_after_commit"`))
+	require.Equal(t, 1, strings.Count(logOutput.String(), "http.body_too_large_after_commit"))
 }
 
 func Test_BodySizeLimit_converts_stream_error_without_context_error(t *testing.T) {
 	// Given
-	logger := newTestLogger(t, &bytes.Buffer{})
+	installGlobalTestLogger(t, &bytes.Buffer{})
 	router := gin.New()
-	router.Use(middleware.BodySizeLimitWithLogger(config.ByteSize(4), logger))
+	router.Use(middleware.BodySizeLimit(config.ByteSize(4)))
 	router.POST("/probe", func(context *gin.Context) {
 		_, err := io.ReadAll(context.Request.Body)
 		require.Error(t, err)
@@ -157,10 +157,10 @@ func Test_BodySizeLimit_converts_stream_error_without_context_error(t *testing.T
 func Test_BodySizeLimit_aborts_later_handlers_after_committed_stream_overflow(t *testing.T) {
 	// Given
 	var logOutput bytes.Buffer
-	logger := newTestLogger(t, &logOutput)
+	installGlobalTestLogger(t, &logOutput)
 	secondHandlerCalled := false
 	router := gin.New()
-	router.Use(middleware.BodySizeLimitWithLogger(config.ByteSize(4), logger))
+	router.Use(middleware.BodySizeLimit(config.ByteSize(4)))
 	router.POST(
 		"/probe",
 		func(context *gin.Context) {
@@ -184,16 +184,16 @@ func Test_BodySizeLimit_aborts_later_handlers_after_committed_stream_overflow(t 
 	require.Equal(t, http.StatusAccepted, recorder.Code)
 	require.Equal(t, "partial", recorder.Body.String())
 	require.False(t, secondHandlerCalled)
-	require.Equal(t, 1, strings.Count(logOutput.String(), `"msg":"http.body_too_large_after_commit"`))
+	require.Equal(t, 1, strings.Count(logOutput.String(), "http.body_too_large_after_commit"))
 }
 
 func Test_BodySizeLimit_does_not_abort_on_non_limit_read_error(t *testing.T) {
 	// Given
 	readErr := errors.New("upstream read failed")
-	logger := newTestLogger(t, &bytes.Buffer{})
+	installGlobalTestLogger(t, &bytes.Buffer{})
 	secondHandlerCalled := false
 	router := gin.New()
-	router.Use(middleware.BodySizeLimitWithLogger(config.ByteSize(4), logger))
+	router.Use(middleware.BodySizeLimit(config.ByteSize(4)))
 	router.POST(
 		"/probe",
 		func(context *gin.Context) {
@@ -230,9 +230,9 @@ func Test_BodySizeLimit_accepts_bodies_at_or_below_limit(t *testing.T) {
 	} {
 		t.Run(testCase.name, func(t *testing.T) {
 			// Given
-			logger := newTestLogger(t, &bytes.Buffer{})
+			installGlobalTestLogger(t, &bytes.Buffer{})
 			router := gin.New()
-			router.Use(middleware.BodySizeLimitWithLogger(config.ByteSize(4), logger))
+			router.Use(middleware.BodySizeLimit(config.ByteSize(4)))
 			router.POST("/probe", func(context *gin.Context) {
 				body, err := io.ReadAll(context.Request.Body)
 				require.NoError(t, err)
@@ -254,10 +254,10 @@ func Test_BodySizeLimit_accepts_bodies_at_or_below_limit(t *testing.T) {
 
 func Test_BodySizeLimit_rejects_real_chunked_HTTP_request(t *testing.T) {
 	// Given
-	logger := newTestLogger(t, &bytes.Buffer{})
+	installGlobalTestLogger(t, &bytes.Buffer{})
 	transferEncoding := make(chan []string, 1)
 	router := gin.New()
-	router.Use(middleware.BodySizeLimitWithLogger(config.ByteSize(4), logger))
+	router.Use(middleware.BodySizeLimit(config.ByteSize(4)))
 	router.POST("/probe", func(context *gin.Context) {
 		transferEncoding <- append([]string(nil), context.Request.TransferEncoding...)
 		_, err := io.ReadAll(context.Request.Body)

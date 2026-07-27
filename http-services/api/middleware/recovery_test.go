@@ -16,9 +16,9 @@ import (
 func Test_Recovery_classifies_aborted_connections_without_stack_or_response(t *testing.T) {
 	// Given
 	var logOutput bytes.Buffer
-	logger := newTestLogger(t, &logOutput)
+	installGlobalTestLogger(t, &logOutput)
 	router := gin.New()
-	router.Use(middleware.RecoveryWithLogger(logger))
+	router.Use(middleware.Recovery())
 	router.GET("/panic", func(*gin.Context) { panic(http.ErrAbortHandler) })
 	recorder := httptest.NewRecorder()
 
@@ -27,18 +27,18 @@ func Test_Recovery_classifies_aborted_connections_without_stack_or_response(t *t
 
 	// Then
 	require.Empty(t, recorder.Body.String())
-	require.Contains(t, logOutput.String(), `"msg":"http.connection_aborted"`)
+	require.Contains(t, logOutput.String(), "http.connection_aborted")
 	require.NotContains(t, logOutput.String(), `"stack"`)
 }
 
 func Test_Recovery_returns_internal_envelope_before_commit(t *testing.T) {
 	// Given
 	var logOutput bytes.Buffer
-	logger := newTestLogger(t, &logOutput)
+	installGlobalTestLogger(t, &logOutput)
 	const traceID = "018f47a5-7b8c-7c11-8000-123456789abc"
 	router := gin.New()
 	router.Use(middleware.TraceID())
-	router.Use(middleware.RecoveryWithLogger(logger))
+	router.Use(middleware.Recovery())
 	router.GET("/panic", func(*gin.Context) { panic("boom") })
 	recorder := httptest.NewRecorder()
 	request := httptest.NewRequest(http.MethodGet, "/panic", nil)
@@ -51,18 +51,17 @@ func Test_Recovery_returns_internal_envelope_before_commit(t *testing.T) {
 	require.Equal(t, http.StatusOK, recorder.Code)
 	requireSemanticEnvelope(t, recorder.Body.Bytes(), http.StatusInternalServerError, "INTERNAL")
 	require.Equal(t, traceID, recorder.Header().Get(middleware.TraceIDHeader))
-	require.Equal(t, 1, strings.Count(logOutput.String(), `"msg":"http.panic_recovered"`))
+	require.Equal(t, 1, strings.Count(logOutput.String(), "http.panic_recovered"))
 	records := decodeLogRecords(t, logOutput.Bytes())
-	require.Len(t, records, 1)
-	require.Equal(t, http.StatusInternalServerError, int(records[0].Status))
+	require.Equal(t, http.StatusInternalServerError, int(findLogRecord(t, records, "http.panic_recovered").Status))
 }
 
 func Test_Recovery_preserves_committed_response_and_logs_once(t *testing.T) {
 	// Given
 	var logOutput bytes.Buffer
-	logger := newTestLogger(t, &logOutput)
+	installGlobalTestLogger(t, &logOutput)
 	router := gin.New()
-	router.Use(middleware.RecoveryWithLogger(logger))
+	router.Use(middleware.Recovery())
 	router.GET("/panic", func(context *gin.Context) {
 		context.String(http.StatusAccepted, "partial")
 		panic("boom")
@@ -75,5 +74,5 @@ func Test_Recovery_preserves_committed_response_and_logs_once(t *testing.T) {
 	// Then
 	require.Equal(t, http.StatusAccepted, recorder.Code)
 	require.Equal(t, "partial", recorder.Body.String())
-	require.Equal(t, 1, strings.Count(logOutput.String(), `"msg":"http.panic_recovered"`))
+	require.Equal(t, 1, strings.Count(logOutput.String(), "http.panic_recovered"))
 }

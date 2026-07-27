@@ -16,11 +16,6 @@ import (
 
 // Recovery converts pre-write panics to the internal envelope and preserves committed responses.
 func Recovery() gin.HandlerFunc {
-	return RecoveryWithLogger(serviceLog.GetGinErrorLogger)
-}
-
-// RecoveryWithLogger recovers panics through a dynamic global error logger provider.
-func RecoveryWithLogger(loggerProvider LoggerProvider) gin.HandlerFunc {
 	return func(context *gin.Context) {
 		defer func() {
 			recovered := recover()
@@ -29,7 +24,11 @@ func RecoveryWithLogger(loggerProvider LoggerProvider) gin.HandlerFunc {
 			}
 
 			if isAbortedConnection(recovered) {
-				loggerFromContext(context.Request.Context(), loggerProvider).Warn(
+				logger := serviceLog.GetGinErrorLogger()
+				if traceID, ok := serviceLog.TraceID(context.Request.Context()); ok {
+					logger = logger.With(zap.String("trace_id", traceID))
+				}
+				logger.Warn(
 					"http.connection_aborted",
 					zap.String(logKeyMethod, context.Request.Method),
 					zap.String(logKeyPath, context.Request.URL.Path),
@@ -44,7 +43,11 @@ func RecoveryWithLogger(loggerProvider LoggerProvider) gin.HandlerFunc {
 			if !committed {
 				status = http.StatusInternalServerError
 			}
-			loggerFromContext(context.Request.Context(), loggerProvider).Error(
+			logger := serviceLog.GetGinErrorLogger()
+			if traceID, ok := serviceLog.TraceID(context.Request.Context()); ok {
+				logger = logger.With(zap.String("trace_id", traceID))
+			}
+			logger.Error(
 				"http.panic_recovered",
 				zap.String(logKeyMethod, context.Request.Method),
 				zap.String(logKeyPath, context.Request.URL.Path),

@@ -10,32 +10,26 @@ import (
 
 	"http-services/api/middleware"
 	"http-services/config"
+	httplog "http-services/utils/log"
 
 	"github.com/gin-gonic/gin"
-	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
+	"github.com/stretchr/testify/require"
 )
 
-func TestNewRouterUsesInjectedDependencies(t *testing.T) {
+func TestNewRouterUsesGlobalZapLoggers(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	var output bytes.Buffer
-	logger := zap.New(zapcore.NewCore(
-		zapcore.NewJSONEncoder(zap.NewProductionEncoderConfig()),
-		zapcore.AddSync(&output),
-		zap.DebugLevel,
-	))
-	provider := middleware.LoggerProvider(func() *zap.Logger { return logger })
+	require.NoError(t, httplog.SetLogger(config.LogConfig{
+		MaxSize: config.LogFileSizeMB(1), MaxAge: config.LogRetentionDays(1),
+		Level: config.LogLevelDebug, GinLevel: config.LogLevelDebug,
+	}, true, &output))
+	t.Cleanup(func() { require.NoError(t, httplog.Close()) })
 	const traceID = "018f47a5-7b8c-7c11-8000-123456789abc"
 	router, err := NewRouter(Options{
 		Server: config.HTTPConfig{MaxBodySize: 10 << 20},
-		Loggers: LoggerProviders{
-			Context: provider,
-			Access:  provider,
-			Error:   provider,
-		},
 		RegisterRoutes: func(group *gin.RouterGroup) {
-			group.GET("/injected", func(c *gin.Context) { c.String(http.StatusOK, "ok") })
+			group.GET("/global", func(c *gin.Context) { c.String(http.StatusOK, "ok") })
 		},
 	})
 	if err != nil {
@@ -43,7 +37,7 @@ func TestNewRouterUsesInjectedDependencies(t *testing.T) {
 	}
 
 	w := httptest.NewRecorder()
-	request := httptest.NewRequest(http.MethodGet, "/api/injected", nil)
+	request := httptest.NewRequest(http.MethodGet, "/api/global", nil)
 	request.Header.Set(middleware.TraceIDHeader, traceID)
 	router.ServeHTTP(w, request)
 	if w.Code != http.StatusOK || w.Body.String() != "ok" {
@@ -53,15 +47,13 @@ func TestNewRouterUsesInjectedDependencies(t *testing.T) {
 		t.Fatalf("trace ID = %q, want %q", got, traceID)
 	}
 	if !strings.Contains(output.String(), "http.request") || !strings.Contains(output.String(), traceID) {
-		t.Fatalf("injected logger did not receive access log: %s", output.String())
+		t.Fatalf("global logger did not receive access log: %s", output.String())
 	}
 }
 
 func TestNewRouterRejectsInvalidOptionsAndTrustedProxy(t *testing.T) {
-	provider := middleware.LoggerProvider(func() *zap.Logger { return zap.NewNop() })
 	valid := Options{
 		Server:         config.HTTPConfig{MaxBodySize: 10 << 20},
-		Loggers:        LoggerProviders{Context: provider, Access: provider, Error: provider},
 		RegisterRoutes: func(*gin.RouterGroup) {},
 	}
 
@@ -69,12 +61,6 @@ func TestNewRouterRejectsInvalidOptionsAndTrustedProxy(t *testing.T) {
 		name   string
 		mutate func(*Options)
 	}{
-		{name: "missing context logger", mutate: func(options *Options) { options.Loggers.Context = nil }},
-		{name: "nil context logger", mutate: func(options *Options) {
-			options.Loggers.Context = func() *zap.Logger { return nil }
-		}},
-		{name: "missing access logger", mutate: func(options *Options) { options.Loggers.Access = nil }},
-		{name: "missing error logger", mutate: func(options *Options) { options.Loggers.Error = nil }},
 		{name: "missing registrar", mutate: func(options *Options) { options.RegisterRoutes = nil }},
 		{name: "invalid trusted proxy", mutate: func(options *Options) {
 			options.Server.TrustedProxies = []string{"not-a-proxy"}

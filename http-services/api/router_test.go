@@ -65,9 +65,9 @@ func TestInitApiMiddlewareOrder(t *testing.T) {
 	}
 
 	want := []string{
-		".TraceIDWithLogger.func",
-		".AccessLogWithLogger.func",
-		".RecoveryWithLogger.func",
+		".TraceID.func",
+		".AccessLog.func",
+		".Recovery.func",
 	}
 	for i, namePart := range want {
 		got := runtime.FuncForPC(reflect.ValueOf(router.Handlers[i]).Pointer()).Name()

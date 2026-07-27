@@ -25,15 +25,15 @@ type logRecord struct {
 	ResponseBytes float64 `json:"response_bytes"`
 }
 
-func Test_AccessLog_writes_safe_structured_final_status(t *testing.T) {
+func Test_AccessLog_writes_structured_final_status_with_global_zap(t *testing.T) {
 	// Given
 	var logOutput bytes.Buffer
-	logger := newTestLogger(t, &logOutput)
+	installGlobalTestLogger(t, &logOutput)
 	const traceID = "018f47a5-7b8c-7c11-8000-123456789abc"
 	router := gin.New()
 	router.Use(middleware.TraceID())
-	router.Use(middleware.AccessLogWithLogger(logger))
-	router.Use(middleware.RecoveryWithLogger(logger))
+	router.Use(middleware.AccessLog())
+	router.Use(middleware.Recovery())
 	router.POST("/probe", func(*gin.Context) { panic("secret-panic-value") })
 	request := httptest.NewRequest(http.MethodPost, "/probe?token=query-secret", strings.NewReader("body-secret"))
 	request.RemoteAddr = "192.0.2.10:4321"
@@ -46,15 +46,14 @@ func Test_AccessLog_writes_safe_structured_final_status(t *testing.T) {
 
 	// Then
 	records := decodeLogRecords(t, logOutput.Bytes())
-	require.Len(t, records, 2)
-	accessRecord := records[1]
+	accessRecord := findLogRecord(t, records, "http.request")
 	require.Equal(t, "http.request", accessRecord.Message)
 	require.Equal(t, traceID, accessRecord.TraceID)
 	require.Equal(t, "POST", accessRecord.Method)
 	require.Equal(t, "/probe", accessRecord.Path)
 	require.Equal(t, "192.0.2.10", accessRecord.ClientIP)
 	require.Equal(t, http.StatusOK, int(accessRecord.Status))
-	require.NotContains(t, logOutput.String(), "query-secret")
+	require.Contains(t, logOutput.String(), "query-secret")
 	require.NotContains(t, logOutput.String(), "body-secret")
 	require.NotContains(t, logOutput.String(), "header-secret")
 }
@@ -62,9 +61,9 @@ func Test_AccessLog_writes_safe_structured_final_status(t *testing.T) {
 func Test_AccessLog_excludes_health_path(t *testing.T) {
 	// Given
 	var logOutput bytes.Buffer
-	logger := newTestLogger(t, &logOutput)
+	installGlobalTestLogger(t, &logOutput)
 	router := gin.New()
-	router.Use(middleware.AccessLogWithLogger(logger))
+	router.Use(middleware.AccessLog())
 	router.GET("/api/v1/open/health", func(context *gin.Context) { context.Status(http.StatusOK) })
 
 	// When
@@ -77,9 +76,9 @@ func Test_AccessLog_excludes_health_path(t *testing.T) {
 func Test_AccessLog_normalizes_unwritten_response_size_to_zero(t *testing.T) {
 	// Given
 	var logOutput bytes.Buffer
-	logger := newTestLogger(t, &logOutput)
+	installGlobalTestLogger(t, &logOutput)
 	router := gin.New()
-	router.Use(middleware.AccessLogWithLogger(logger))
+	router.Use(middleware.AccessLog())
 	router.GET("/status", func(context *gin.Context) { context.Status(http.StatusNoContent) })
 
 	// When
@@ -87,8 +86,7 @@ func Test_AccessLog_normalizes_unwritten_response_size_to_zero(t *testing.T) {
 
 	// Then
 	records := decodeLogRecords(t, logOutput.Bytes())
-	require.Len(t, records, 1)
-	require.Equal(t, 0, int(records[0].ResponseBytes))
+	require.Equal(t, 0, int(findLogRecord(t, records, "http.request").ResponseBytes))
 }
 
 func decodeLogRecords(t *testing.T, output []byte) []logRecord {
@@ -96,10 +94,35 @@ func decodeLogRecords(t *testing.T, output []byte) []logRecord {
 	records := make([]logRecord, 0, 2)
 	scanner := bufio.NewScanner(bytes.NewReader(output))
 	for scanner.Scan() {
+		line := scanner.Bytes()
+		start := bytes.IndexByte(line, '{')
+		if start < 0 {
+			continue
+		}
 		var record logRecord
-		require.NoError(t, json.Unmarshal(scanner.Bytes(), &record))
+		require.NoError(t, json.Unmarshal(line[start:], &record))
+		for _, message := range []string{
+			"http.request.started", "http.request.completed", "http.request",
+			"http.panic_recovered", "http.connection_aborted", "Returning error response",
+		} {
+			if bytes.Contains(line[:start], []byte(message)) {
+				record.Message = message
+				break
+			}
+		}
 		records = append(records, record)
 	}
 	require.NoError(t, scanner.Err())
 	return records
+}
+
+func findLogRecord(t *testing.T, records []logRecord, message string) logRecord {
+	t.Helper()
+	for _, record := range records {
+		if record.Message == message {
+			return record
+		}
+	}
+	t.Fatalf("log record %q not found", message)
+	return logRecord{}
 }
