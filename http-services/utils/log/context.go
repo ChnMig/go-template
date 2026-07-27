@@ -49,43 +49,8 @@ func FromContext(ctx *gin.Context) *zap.Logger {
 	return GetLogger()
 }
 
-// RequestFields returns all request inputs captured by the HTTP middleware.
-func RequestFields(ctx *gin.Context) []zap.Field {
-	if ctx == nil || ctx.Request == nil {
-		return nil
-	}
-	fields := make([]zap.Field, 0, 7)
-	if ctx.Request.URL != nil && ctx.Request.URL.RawQuery != "" {
-		fields = append(fields, zap.String("query", ctx.Request.URL.RawQuery))
-	}
-	if len(ctx.Request.Header) > 0 {
-		fields = append(fields, zap.Any("headers", ctx.Request.Header))
-	}
-	if len(ctx.Request.PostForm) > 0 {
-		fields = append(fields, zap.Any("form", ctx.Request.PostForm))
-	}
-	if ctx.Request.MultipartForm != nil && len(ctx.Request.MultipartForm.Value) > 0 {
-		fields = append(fields, zap.Any("multipart_form", ctx.Request.MultipartForm.Value))
-	}
-	if len(ctx.Params) > 0 {
-		params := make(map[string]string, len(ctx.Params))
-		for _, param := range ctx.Params {
-			params[param.Key] = param.Value
-		}
-		fields = append(fields, zap.Any("path_params", params))
-	}
-	if bound, exists := ctx.Get(contextkey.BoundParams); exists {
-		fields = append(fields, zap.Any("params", bound))
-	}
-	if value, exists := ctx.Get(contextkey.RequestBody); exists {
-		if capture, ok := value.(*contextkey.RequestBodyCapture); ok && len(capture.Bytes) > 0 {
-			fields = append(fields, zap.ByteString("body", capture.Bytes))
-		}
-	}
-	return fields
-}
-
-// WithRequest returns a request-scoped logger carrying the complete captured input.
+// WithRequest returns the safe request-scoped logger installed by middleware.
+// Query strings, forms, bound values, bodies, and credentials are never added.
 func WithRequest(ctx *gin.Context) *zap.Logger {
-	return FromContext(ctx).With(RequestFields(ctx)...)
+	return FromContext(ctx)
 }

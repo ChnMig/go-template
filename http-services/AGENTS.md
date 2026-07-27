@@ -49,7 +49,7 @@ http-services/
 | `main` | func | `main.go` | 单一可执行入口与进程边界 |
 | `CLI` | var | `main.go` | Kong flags：`-d/--dev`、`-v/--version`、`-m/--migrate` |
 | `bootstrap.Run` | func | `bootstrap/app.go` | 初始化、迁移或 HTTP 运行、PID 与确定性清理 |
-| `api.NewRouter` | func | `api/router.go` | 显式注入配置、logger、Trace factory、registrar，返回构建错误 |
+| `api.NewRouter` | func | `api/router.go` | 显式注入配置、logger、registrar，返回构建错误 |
 | `api.InitApi` | func | `api/router.go` | 旧调用方兼容入口；生产 bootstrap 不使用 |
 | `config.Load` | func | `config/load.go` | 返回验证后的类型化启动快照；`LoadConfig` 仅保留旧调用兼容 |
 | `config.WatchLogConfig` | func | `config/watch.go` | 每个应用实例只监听并更新 `LogConfig`，返回可关闭、可等待的 watcher |
@@ -103,7 +103,7 @@ http-services/
 - 不要提交真实 `config.yaml` 或密钥；JWT key 必须至少 32 字符且不能使用示例值。
 - 不要重新引入服务内 TLS/ACME 作为默认能力；当前服务只监听 HTTP，TLS 由反向代理/Ingress/负载均衡终止。
 - 不要在 `vendor/` 下写项目规范或修改第三方代码。
-- 错误日志必须保留具体 wrapped error、完整响应、query、headers、解析参数、路径参数，以及在 `server.max_body_size` 内捕获的已消费请求体。
+- 不要在 access/recovery 日志记录 query、请求体、Authorization、Cookie、panic value 或其他凭据。
 
 ## COMMANDS
 

@@ -65,7 +65,7 @@ func TestInitApiMiddlewareOrder(t *testing.T) {
 	}
 
 	want := []string{
-		".TraceIDWithDependencies.func",
+		".TraceIDWithLogger.func",
 		".AccessLogWithLogger.func",
 		".RecoveryWithLogger.func",
 	}

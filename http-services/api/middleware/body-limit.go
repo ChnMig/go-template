@@ -8,7 +8,6 @@ import (
 
 	"http-services/api/response"
 	"http-services/config"
-	"http-services/utils/contextkey"
 	serviceLog "http-services/utils/log"
 
 	"github.com/gin-gonic/gin"
@@ -19,15 +18,11 @@ type bodyLimitReadCloser struct {
 	body    io.ReadCloser
 	context *gin.Context
 	logger  LoggerProvider
-	capture *contextkey.RequestBodyCapture
 	once    sync.Once
 }
 
 func (reader *bodyLimitReadCloser) Read(buffer []byte) (int, error) {
 	bytesRead, err := reader.body.Read(buffer)
-	if bytesRead > 0 {
-		reader.capture.Bytes = append(reader.capture.Bytes, buffer[:bytesRead]...)
-	}
 	var maxBytesError *http.MaxBytesError
 	if !errors.As(err, &maxBytesError) {
 		return bytesRead, err
@@ -62,8 +57,6 @@ func BodySizeLimit(maxSize config.ByteSize) gin.HandlerFunc {
 // BodySizeLimitWithLogger uses a dynamic global error logger provider.
 func BodySizeLimitWithLogger(maxSize config.ByteSize, loggerProvider LoggerProvider) gin.HandlerFunc {
 	return func(context *gin.Context) {
-		capture := &contextkey.RequestBodyCapture{}
-		context.Set(contextkey.RequestBody, capture)
 		if context.Request.ContentLength > int64(maxSize) {
 			response.ReturnError(context, response.INVALID_ARGUMENT, "request body too large")
 			return
@@ -73,7 +66,6 @@ func BodySizeLimitWithLogger(maxSize config.ByteSize, loggerProvider LoggerProvi
 			body:    http.MaxBytesReader(context.Writer, context.Request.Body, int64(maxSize)),
 			context: context,
 			logger:  loggerProvider,
-			capture: capture,
 		}
 		context.Next()
 	}

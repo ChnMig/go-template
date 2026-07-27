@@ -12,7 +12,6 @@ import (
 	"http-services/api/middleware"
 
 	"github.com/gin-gonic/gin"
-	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 )
 
@@ -21,28 +20,25 @@ type logRecord struct {
 	TraceID       string  `json:"trace_id"`
 	Method        string  `json:"method"`
 	Path          string  `json:"path"`
-	RawQuery      string  `json:"raw_query"`
 	ClientIP      string  `json:"client_ip"`
-	UserAgent     string  `json:"user_agent"`
-	Error         string  `json:"error"`
 	Status        float64 `json:"status"`
 	ResponseBytes float64 `json:"response_bytes"`
 }
 
-func Test_AccessLog_writes_diagnostic_request_metadata(t *testing.T) {
+func Test_AccessLog_writes_safe_structured_final_status(t *testing.T) {
 	// Given
 	var logOutput bytes.Buffer
 	logger := newTestLogger(t, &logOutput)
-	traceID := uuid.MustParse("018f47a5-7b8c-7c11-8000-123456789abc")
+	const traceID = "018f47a5-7b8c-7c11-8000-123456789abc"
 	router := gin.New()
-	router.Use(middleware.TraceID(func() (uuid.UUID, error) { return traceID, nil }))
+	router.Use(middleware.TraceID())
 	router.Use(middleware.AccessLogWithLogger(logger))
 	router.Use(middleware.RecoveryWithLogger(logger))
 	router.POST("/probe", func(*gin.Context) { panic("secret-panic-value") })
 	request := httptest.NewRequest(http.MethodPost, "/probe?token=query-secret", strings.NewReader("body-secret"))
 	request.RemoteAddr = "192.0.2.10:4321"
+	request.Header.Set(middleware.TraceIDHeader, traceID)
 	request.Header.Set("Authorization", "Bearer header-secret")
-	request.Header.Set("User-Agent", "diagnostic-agent")
 	recorder := httptest.NewRecorder()
 
 	// When
@@ -53,13 +49,14 @@ func Test_AccessLog_writes_diagnostic_request_metadata(t *testing.T) {
 	require.Len(t, records, 2)
 	accessRecord := records[1]
 	require.Equal(t, "http.request", accessRecord.Message)
-	require.Equal(t, traceID.String(), accessRecord.TraceID)
+	require.Equal(t, traceID, accessRecord.TraceID)
 	require.Equal(t, "POST", accessRecord.Method)
 	require.Equal(t, "/probe", accessRecord.Path)
-	require.Equal(t, "token=query-secret", accessRecord.RawQuery)
 	require.Equal(t, "192.0.2.10", accessRecord.ClientIP)
-	require.Equal(t, "diagnostic-agent", accessRecord.UserAgent)
 	require.Equal(t, http.StatusOK, int(accessRecord.Status))
+	require.NotContains(t, logOutput.String(), "query-secret")
+	require.NotContains(t, logOutput.String(), "body-secret")
+	require.NotContains(t, logOutput.String(), "header-secret")
 }
 
 func Test_AccessLog_excludes_health_path(t *testing.T) {

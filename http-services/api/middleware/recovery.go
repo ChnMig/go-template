@@ -29,14 +29,12 @@ func RecoveryWithLogger(loggerProvider LoggerProvider) gin.HandlerFunc {
 			}
 
 			if isAbortedConnection(recovered) {
-				fields := []zap.Field{
+				loggerFromContext(context.Request.Context(), loggerProvider).Warn(
+					"http.connection_aborted",
 					zap.String(logKeyMethod, context.Request.Method),
 					zap.String(logKeyPath, context.Request.URL.Path),
-					zap.Any("panic", recovered),
 					zap.String(logKeyPanicType, fmt.Sprintf("%T", recovered)),
-				}
-				fields = append(fields, serviceLog.RequestFields(context)...)
-				loggerFromContext(context.Request.Context(), loggerProvider).Warn("http.connection_aborted", fields...)
+				)
 				context.Abort()
 				return
 			}
@@ -46,16 +44,14 @@ func RecoveryWithLogger(loggerProvider LoggerProvider) gin.HandlerFunc {
 			if !committed {
 				status = http.StatusInternalServerError
 			}
-			fields := []zap.Field{
+			loggerFromContext(context.Request.Context(), loggerProvider).Error(
+				"http.panic_recovered",
 				zap.String(logKeyMethod, context.Request.Method),
 				zap.String(logKeyPath, context.Request.URL.Path),
 				zap.Int(logKeyStatus, status),
-				zap.Any("panic", recovered),
 				zap.String(logKeyPanicType, fmt.Sprintf("%T", recovered)),
 				zap.ByteString(logKeyStack, debug.Stack()),
-			}
-			fields = append(fields, serviceLog.RequestFields(context)...)
-			loggerFromContext(context.Request.Context(), loggerProvider).Error("http.panic_recovered", fields...)
+			)
 			context.Abort()
 			if !committed {
 				response.ReturnError(context, response.INTERNAL, "internal server error")

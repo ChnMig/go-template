@@ -10,6 +10,7 @@ import (
 	"go.uber.org/zap"
 	"http-services/api/response"
 	"http-services/utils/contextkey"
+	"http-services/utils/id"
 	serviceLog "http-services/utils/log"
 )
 
@@ -22,18 +23,18 @@ const (
 )
 
 // TraceID validates or generates a trace identifier and adds it to request context.
-func TraceID(factory IDFactory) gin.HandlerFunc {
-	return TraceIDWithDependencies(factory, zap.L)
+func TraceID() gin.HandlerFunc {
+	return TraceIDWithLogger(zap.L)
 }
 
-// TraceIDWithDependencies installs the trace ID and request-scoped logger.
-func TraceIDWithDependencies(factory IDFactory, loggerProvider LoggerProvider) gin.HandlerFunc {
+// TraceIDWithLogger installs the trace ID and request-scoped logger.
+func TraceIDWithLogger(loggerProvider LoggerProvider) gin.HandlerFunc {
 	return func(context *gin.Context) {
 		traceID := context.GetHeader(TraceIDHeader)
 		parsedTraceID, parseErr := uuid.Parse(traceID)
 		validTraceID := parseErr == nil && len(traceID) == 36 && strings.EqualFold(parsedTraceID.String(), traceID)
 		if !validTraceID {
-			generated, generationErr := factory()
+			generated, generationErr := id.GenerateUUIDv7()
 			if generationErr != nil {
 				response.ReturnError(context, response.INTERNAL, "internal server error")
 				return

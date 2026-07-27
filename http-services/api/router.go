@@ -10,7 +10,6 @@ import (
 	httplog "http-services/utils/log"
 
 	"github.com/gin-gonic/gin"
-	"github.com/google/uuid"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
@@ -32,7 +31,6 @@ type LoggerProviders struct {
 type Options struct {
 	Server         config.HTTPConfig
 	Loggers        LoggerProviders
-	IDFactory      middleware.IDFactory
 	RegisterRoutes Registrar
 }
 
@@ -45,7 +43,6 @@ func DefaultOptions(server config.HTTPConfig) Options {
 			Access:  httplog.GetGinLogger,
 			Error:   httplog.GetGinErrorLogger,
 		},
-		IDFactory:      uuid.NewV7,
 		RegisterRoutes: app.RegisterRoutes,
 	}
 }
@@ -68,7 +65,7 @@ func NewRouter(options Options) (*gin.Engine, error) {
 	}
 
 	router.Use(
-		middleware.TraceIDWithDependencies(options.IDFactory, options.Loggers.Context),
+		middleware.TraceIDWithLogger(options.Loggers.Context),
 		middleware.AccessLogWithLogger(options.Loggers.Access),
 		middleware.RecoveryWithLogger(options.Loggers.Error),
 	)
@@ -122,8 +119,6 @@ func validateOptions(options Options) error {
 		return fmt.Errorf("%w: error logger", ErrInvalidOptions)
 	case options.Loggers.Error() == nil:
 		return fmt.Errorf("%w: error logger returned nil", ErrInvalidOptions)
-	case options.IDFactory == nil:
-		return fmt.Errorf("%w: trace ID factory", ErrInvalidOptions)
 	case options.RegisterRoutes == nil:
 		return fmt.Errorf("%w: route registrar", ErrInvalidOptions)
 	default:

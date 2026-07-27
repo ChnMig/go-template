@@ -2,17 +2,14 @@ package middleware_test
 
 import (
 	"bytes"
-	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 
 	"http-services/api/middleware"
-	"http-services/config"
 
 	"github.com/gin-gonic/gin"
-	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 )
 
@@ -38,20 +35,14 @@ func Test_Recovery_returns_internal_envelope_before_commit(t *testing.T) {
 	// Given
 	var logOutput bytes.Buffer
 	logger := newTestLogger(t, &logOutput)
-	traceID := uuid.MustParse("018f47a5-7b8c-7c11-8000-123456789abc")
+	const traceID = "018f47a5-7b8c-7c11-8000-123456789abc"
 	router := gin.New()
-	router.Use(middleware.TraceID(func() (uuid.UUID, error) { return traceID, nil }))
+	router.Use(middleware.TraceID())
 	router.Use(middleware.RecoveryWithLogger(logger))
-	router.Use(middleware.BodySizeLimitWithLogger(config.ByteSize(64), logger))
-	router.POST("/panic", func(context *gin.Context) {
-		_, err := io.ReadAll(context.Request.Body)
-		require.NoError(t, err)
-		panic("boom-diagnostic")
-	})
+	router.GET("/panic", func(*gin.Context) { panic("boom") })
 	recorder := httptest.NewRecorder()
-	request := httptest.NewRequest(http.MethodPost, "/panic?order_no=ORDER-1", strings.NewReader(`{"amount":100}`))
-	request.Header.Set("Authorization", "Bearer diagnostic-token")
-	request.Header.Set("User-Agent", "diagnostic-agent")
+	request := httptest.NewRequest(http.MethodGet, "/panic", nil)
+	request.Header.Set(middleware.TraceIDHeader, traceID)
 
 	// When
 	router.ServeHTTP(recorder, request)
@@ -59,16 +50,11 @@ func Test_Recovery_returns_internal_envelope_before_commit(t *testing.T) {
 	// Then
 	require.Equal(t, http.StatusOK, recorder.Code)
 	requireSemanticEnvelope(t, recorder.Body.Bytes(), http.StatusInternalServerError, "INTERNAL")
-	require.Equal(t, traceID.String(), recorder.Header().Get(middleware.TraceIDHeader))
+	require.Equal(t, traceID, recorder.Header().Get(middleware.TraceIDHeader))
 	require.Equal(t, 1, strings.Count(logOutput.String(), `"msg":"http.panic_recovered"`))
 	records := decodeLogRecords(t, logOutput.Bytes())
 	require.Len(t, records, 1)
 	require.Equal(t, http.StatusInternalServerError, int(records[0].Status))
-	for _, expected := range []string{
-		"boom-diagnostic", "order_no=ORDER-1", "Bearer diagnostic-token", "diagnostic-agent", `\"amount\":100`,
-	} {
-		require.Contains(t, logOutput.String(), expected)
-	}
 }
 
 func Test_Recovery_preserves_committed_response_and_logs_once(t *testing.T) {
