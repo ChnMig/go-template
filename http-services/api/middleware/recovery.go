@@ -8,60 +8,58 @@ import (
 	"syscall"
 
 	"http-services/api/response"
-	httplog "http-services/utils/log"
+	serviceLog "http-services/utils/log"
 
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
 )
 
-// Recovery 将 panic 转换为统一响应，并写入带请求上下文的错误日志。
+// Recovery converts pre-write panics to the internal envelope and preserves committed responses.
 func Recovery() gin.HandlerFunc {
-	return RecoveryWithLogger(httplog.GetGinErrorLogger)
+	return RecoveryWithLogger(serviceLog.GetGinErrorLogger)
 }
 
-// RecoveryWithLogger 使用调用方注入的动态错误 logger provider 恢复 panic。
+// RecoveryWithLogger recovers panics through a dynamic global error logger provider.
 func RecoveryWithLogger(loggerProvider LoggerProvider) gin.HandlerFunc {
-	return func(c *gin.Context) {
+	return func(context *gin.Context) {
 		defer func() {
-			if recovered := recover(); recovered != nil {
-				if isAbortedConnection(recovered) {
-					loggerFromProvider(loggerProvider).Warn("HTTP connection aborted",
-						zap.String("method", c.Request.Method),
-						zap.String("path", c.Request.URL.Path),
-						zap.String("client_ip", c.ClientIP()),
-						zap.String("trace_id", traceIDFromContext(c)),
-						zap.String("panic_type", fmt.Sprintf("%T", recovered)),
-					)
-					c.Abort()
-					return
-				}
+			recovered := recover()
+			if recovered == nil {
+				return
+			}
 
-				committed := c.Writer.Written()
-				loggerFromProvider(loggerProvider).Error("HTTP panic recovered",
-					zap.String("method", c.Request.Method),
-					zap.String("path", c.Request.URL.Path),
-					zap.Int("status", recoveryStatus(c, committed)),
-					zap.String("client_ip", c.ClientIP()),
-					zap.String("trace_id", traceIDFromContext(c)),
-					zap.String("panic_type", fmt.Sprintf("%T", recovered)),
-					zap.ByteString("stack", debug.Stack()),
+			if isAbortedConnection(recovered) {
+				loggerFromContext(context.Request.Context(), loggerProvider).Warn(
+					"http.connection_aborted",
+					zap.String(logKeyMethod, context.Request.Method),
+					zap.String(logKeyPath, context.Request.URL.Path),
+					zap.String(logKeyPanicType, fmt.Sprintf("%T", recovered)),
 				)
-				c.Abort()
-				if !committed {
-					response.ReturnError(c, response.INTERNAL, "服务内部错误")
-				}
+				context.Abort()
+				return
+			}
+
+			committed := context.Writer.Written()
+			status := context.Writer.Status()
+			if !committed {
+				status = http.StatusInternalServerError
+			}
+			loggerFromContext(context.Request.Context(), loggerProvider).Error(
+				"http.panic_recovered",
+				zap.String(logKeyMethod, context.Request.Method),
+				zap.String(logKeyPath, context.Request.URL.Path),
+				zap.Int(logKeyStatus, status),
+				zap.String(logKeyPanicType, fmt.Sprintf("%T", recovered)),
+				zap.ByteString(logKeyStack, debug.Stack()),
+			)
+			context.Abort()
+			if !committed {
+				response.ReturnError(context, response.INTERNAL, "internal server error")
 			}
 		}()
 
-		c.Next()
+		context.Next()
 	}
-}
-
-func recoveryStatus(c *gin.Context, committed bool) int {
-	if committed {
-		return c.Writer.Status()
-	}
-	return http.StatusInternalServerError
 }
 
 func isAbortedConnection(recovered any) bool {

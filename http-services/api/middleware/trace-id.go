@@ -1,71 +1,58 @@
+// Package middleware provides the service's ordered HTTP middleware chain.
 package middleware
 
 import (
-	"http-services/utils/contextkey"
-	"http-services/utils/id"
+	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
+
 	"go.uber.org/zap"
+	"http-services/api/response"
+	"http-services/utils/contextkey"
+	serviceLog "http-services/utils/log"
 )
 
+// TraceIDHeader is the request and response correlation header.
+const TraceIDHeader = serviceLog.TraceIDHeader
+
 const (
-	TraceIDHeaderKey  = contextkey.TraceIDHeader
+	TraceIDHeaderKey  = TraceIDHeader
 	TraceIDContextKey = contextkey.TraceID
 )
 
-func TraceID() gin.HandlerFunc {
-	return TraceIDWithDependencies(id.GenerateID, zap.L)
+// TraceID validates or generates a trace identifier and adds it to request context.
+func TraceID(factory IDFactory) gin.HandlerFunc {
+	return TraceIDWithDependencies(factory, zap.L)
 }
 
-// TraceIDWithDependencies 使用显式依赖注入追踪 ID factory 和上下文 logger。
-func TraceIDWithDependencies(factory TraceIDFactory, loggerProvider LoggerProvider) gin.HandlerFunc {
-	if factory == nil {
-		factory = id.GenerateID
-	}
-	return func(c *gin.Context) {
-		traceID := c.GetHeader(TraceIDHeaderKey)
-		if !validTraceID(traceID) {
-			traceID = factory()
-			if !validTraceID(traceID) {
-				traceID = id.GenerateID()
+// TraceIDWithDependencies installs the trace ID and request-scoped logger.
+func TraceIDWithDependencies(factory IDFactory, loggerProvider LoggerProvider) gin.HandlerFunc {
+	return func(context *gin.Context) {
+		traceID := context.GetHeader(TraceIDHeader)
+		parsedTraceID, parseErr := uuid.Parse(traceID)
+		validTraceID := parseErr == nil && len(traceID) == 36 && strings.EqualFold(parsedTraceID.String(), traceID)
+		if !validTraceID {
+			generated, generationErr := factory()
+			if generationErr != nil {
+				response.ReturnError(context, response.INTERNAL, "internal server error")
+				return
 			}
+			traceID = generated.String()
 		}
 
-		c.Set(TraceIDContextKey, traceID)
-		c.Request = c.Request.WithContext(contextkey.WithTraceID(c.Request.Context(), traceID))
-		c.Header(TraceIDHeaderKey, traceID)
-
-		// 创建带上下文信息的 logger 并存入 context
-		contextLogger := loggerFromProvider(loggerProvider).With(
+		context.Set(contextkey.TraceID, traceID)
+		context.Request = context.Request.WithContext(serviceLog.WithTraceID(context.Request.Context(), traceID))
+		context.Header(TraceIDHeader, traceID)
+		requestLogger := loggerFromProvider(loggerProvider).With(
 			zap.String("trace_id", traceID),
-			zap.String("method", c.Request.Method),
-			zap.String("path", c.Request.URL.Path),
-			zap.String("client_ip", c.ClientIP()),
+			zap.String(logKeyMethod, context.Request.Method),
+			zap.String(logKeyPath, context.Request.URL.Path),
+			zap.String(logKeyClientIP, context.ClientIP()),
 		)
-		c.Set(contextkey.Logger, contextLogger)
-
-		// 记录请求开始（调试级别）
-		contextLogger.Debug("Request started")
-
-		c.Next()
-
-		// 记录请求完成（包含状态码，调试级别）
-		contextLogger.Debug("Request completed",
-			zap.Int("status_code", c.Writer.Status()),
-		)
+		context.Set(contextkey.Logger, requestLogger)
+		requestLogger.Debug("http.request.started")
+		context.Next()
+		requestLogger.Debug("http.request.completed", zap.Int(logKeyStatus, context.Writer.Status()))
 	}
-}
-
-func validTraceID(traceID string) bool {
-	if len(traceID) != 32 {
-		return false
-	}
-	for _, character := range traceID {
-		if character < '0' || character > '9' {
-			if character < 'a' || character > 'f' {
-				return false
-			}
-		}
-	}
-	return true
 }

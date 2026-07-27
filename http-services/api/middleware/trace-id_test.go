@@ -1,113 +1,162 @@
-package middleware
+package middleware_test
 
 import (
+	"bytes"
+	"errors"
 	"net/http"
 	"net/http/httptest"
-	"regexp"
 	"testing"
 
-	"http-services/utils/contextkey"
+	"http-services/api/middleware"
+	serviceLog "http-services/utils/log"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
+	"github.com/stretchr/testify/require"
 )
 
-func TestTraceIDMiddleware_GenerateWhenMissing(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-
+func Test_TraceID_stores_safe_request_context_logger(t *testing.T) {
+	var output bytes.Buffer
+	generated := uuid.MustParse("018f47a5-7b8c-7c11-8000-123456789abc")
 	router := gin.New()
-	router.Use(TraceID())
-	router.GET("/", func(c *gin.Context) {
-		c.String(http.StatusOK, "ok")
+	router.Use(middleware.TraceIDWithDependencies(
+		func() (uuid.UUID, error) { return generated, nil }, newTestLogger(t, &output),
+	))
+	router.GET("/probe", func(context *gin.Context) {
+		serviceLog.FromContext(context).Info("handler event")
+		context.Status(http.StatusNoContent)
 	})
+	recorder := httptest.NewRecorder()
 
-	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/", nil)
-	router.ServeHTTP(w, req)
+	router.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/probe?token=secret", nil))
 
-	if w.Code != http.StatusOK {
-		t.Fatalf("expected status %d, got %d", http.StatusOK, w.Code)
-	}
+	require.Contains(t, output.String(), generated.String())
+	require.Contains(t, output.String(), `"method":"GET"`)
+	require.Contains(t, output.String(), `"path":"/probe"`)
+	require.NotContains(t, output.String(), "secret")
+}
 
-	traceID := w.Header().Get(TraceIDHeaderKey)
-	if traceID == "" {
-		t.Fatal("expected X-Trace-ID header to be set")
-	}
+func Test_TraceID_preserves_valid_inbound_UUID(t *testing.T) {
+	// Given
+	validTraceID := "018f47a5-7b8c-7c11-8000-123456789abc"
+	factoryCalled := false
+	router := gin.New()
+	router.Use(middleware.TraceID(func() (uuid.UUID, error) {
+		factoryCalled = true
+		return uuid.Nil, nil
+	}))
+	router.GET("/probe", func(context *gin.Context) {
+		traceID, ok := serviceLog.TraceID(context.Request.Context())
+		require.True(t, ok)
+		context.String(http.StatusOK, traceID)
+	})
+	request := httptest.NewRequest(http.MethodGet, "/probe", nil)
+	request.Header.Set(middleware.TraceIDHeader, validTraceID)
+	recorder := httptest.NewRecorder()
 
-	matched, err := regexp.MatchString(`^[a-f0-9]{32}$`, traceID)
-	if err != nil {
-		t.Fatalf("Regex error: %v", err)
-	}
-	if !matched {
-		t.Fatalf("expected X-Trace-ID to be 32 char lower hex, got: %s", traceID)
+	// When
+	router.ServeHTTP(recorder, request)
+
+	// Then
+	require.Equal(t, http.StatusOK, recorder.Code)
+	require.Equal(t, validTraceID, recorder.Header().Get(middleware.TraceIDHeader))
+	require.Equal(t, validTraceID, recorder.Body.String())
+	require.False(t, factoryCalled)
+}
+
+func Test_TraceID_replaces_malformed_header_with_UUIDv7(t *testing.T) {
+	// Given
+	generated := uuid.MustParse("018f47a5-7b8c-7c11-8000-123456789abc")
+	router := gin.New()
+	router.Use(middleware.TraceID(func() (uuid.UUID, error) { return generated, nil }))
+	router.GET("/probe", func(context *gin.Context) { context.Status(http.StatusNoContent) })
+	request := httptest.NewRequest(http.MethodGet, "/probe", nil)
+	request.Header.Set(middleware.TraceIDHeader, "not-a-uuid")
+	recorder := httptest.NewRecorder()
+
+	// When
+	router.ServeHTTP(recorder, request)
+
+	// Then
+	require.Equal(t, http.StatusNoContent, recorder.Code)
+	require.Equal(t, generated.String(), recorder.Header().Get(middleware.TraceIDHeader))
+}
+
+func Test_TraceID_replaces_noncanonical_UUID_header(t *testing.T) {
+	// Given
+	generated := uuid.MustParse("018f47a5-7b8c-7c11-8000-123456789abc")
+	router := gin.New()
+	router.Use(middleware.TraceID(func() (uuid.UUID, error) { return generated, nil }))
+	router.GET("/probe", func(context *gin.Context) { context.Status(http.StatusNoContent) })
+	request := httptest.NewRequest(http.MethodGet, "/probe", nil)
+	request.Header.Set(middleware.TraceIDHeader, "018f47a57b8c7c118000123456789abc")
+	recorder := httptest.NewRecorder()
+
+	// When
+	router.ServeHTTP(recorder, request)
+
+	// Then
+	require.Equal(t, generated.String(), recorder.Header().Get(middleware.TraceIDHeader))
+}
+
+func Test_TraceID_replaces_other_noncanonical_UUID_forms(t *testing.T) {
+	for _, inbound := range []string{
+		"urn:uuid:018f47a5-7b8c-7c11-8000-123456789abc",
+		"{018f47a5-7b8c-7c11-8000-123456789abc}",
+	} {
+		t.Run(inbound, func(t *testing.T) {
+			// Given
+			generated := uuid.MustParse("019f4ace-61ab-7382-899a-8f94844f0135")
+			router := gin.New()
+			router.Use(middleware.TraceID(func() (uuid.UUID, error) { return generated, nil }))
+			router.GET("/probe", func(context *gin.Context) { context.Status(http.StatusNoContent) })
+			request := httptest.NewRequest(http.MethodGet, "/probe", nil)
+			request.Header.Set(middleware.TraceIDHeader, inbound)
+			recorder := httptest.NewRecorder()
+
+			// When
+			router.ServeHTTP(recorder, request)
+
+			// Then
+			require.Equal(t, generated.String(), recorder.Header().Get(middleware.TraceIDHeader))
+		})
 	}
 }
 
-func TestTraceIDMiddleware_KeepValidProvidedValue(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-
-	const expectedTraceID = "0123456789abcdef0123456789abcdef"
-
+func Test_TraceID_preserves_uppercase_canonical_UUID(t *testing.T) {
+	// Given
+	inbound := "018F47A5-7B8C-7C11-8000-123456789ABC"
 	router := gin.New()
-	router.Use(TraceID())
-	router.GET("/", func(c *gin.Context) {
-		c.String(http.StatusOK, "ok")
-	})
+	router.Use(middleware.TraceID(func() (uuid.UUID, error) { return uuid.Nil, errors.New("must not generate") }))
+	router.GET("/probe", func(context *gin.Context) { context.Status(http.StatusNoContent) })
+	request := httptest.NewRequest(http.MethodGet, "/probe", nil)
+	request.Header.Set(middleware.TraceIDHeader, inbound)
+	recorder := httptest.NewRecorder()
 
-	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/", nil)
-	req.Header.Set(TraceIDHeaderKey, expectedTraceID)
-	router.ServeHTTP(w, req)
+	// When
+	router.ServeHTTP(recorder, request)
 
-	if w.Code != http.StatusOK {
-		t.Fatalf("expected status %d, got %d", http.StatusOK, w.Code)
-	}
-
-	traceID := w.Header().Get(TraceIDHeaderKey)
-	if traceID != expectedTraceID {
-		t.Fatalf("expected X-Trace-ID %q, got %q", expectedTraceID, traceID)
-	}
+	// Then
+	require.Equal(t, inbound, recorder.Header().Get(middleware.TraceIDHeader))
 }
 
-func TestTraceIDMiddleware_ReplacesInvalidProvidedValue(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-
+func Test_TraceID_returns_internal_error_without_downstream_or_header_when_generation_fails(t *testing.T) {
+	// Given
+	downstreamCalled := false
 	router := gin.New()
-	router.Use(TraceID())
-	router.GET("/", func(c *gin.Context) {
-		traceID, ok := contextkey.TraceIDFromContext(c.Request.Context())
-		if !ok {
-			t.Fatal("标准 context 中缺少 trace ID")
-		}
-		if traceID != c.GetString(TraceIDContextKey) {
-			t.Fatalf("标准 context trace ID = %q, Gin context = %q", traceID, c.GetString(TraceIDContextKey))
-		}
-		c.String(http.StatusOK, "ok")
+	router.Use(middleware.TraceID(func() (uuid.UUID, error) { return uuid.Nil, errors.New("entropy unavailable") }))
+	router.GET("/probe", func(context *gin.Context) {
+		downstreamCalled = true
+		context.Status(http.StatusNoContent)
 	})
+	recorder := httptest.NewRecorder()
 
-	for _, invalid := range []string{"provided-trace-id", "0123456789ABCDEF0123456789ABCDEF", "0123456789abcdef0123456789abcdeg"} {
-		w := httptest.NewRecorder()
-		req := httptest.NewRequest(http.MethodGet, "/", nil)
-		req.Header.Set(TraceIDHeaderKey, invalid)
-		router.ServeHTTP(w, req)
+	// When
+	router.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/probe", nil))
 
-		got := w.Header().Get(TraceIDHeaderKey)
-		if got == invalid || !regexp.MustCompile(`^[a-f0-9]{32}$`).MatchString(got) {
-			t.Fatalf("非法 trace ID %q 未被替换，got %q", invalid, got)
-		}
-	}
-}
-
-func TestTraceIDWithDependenciesFallsBackWhenFactoryReturnsInvalidValue(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-
-	router := gin.New()
-	router.Use(TraceIDWithDependencies(func() string { return "invalid" }, nil))
-	router.GET("/", func(c *gin.Context) { c.Status(http.StatusNoContent) })
-	w := httptest.NewRecorder()
-	router.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/", nil))
-
-	traceID := w.Header().Get(TraceIDHeaderKey)
-	if !regexp.MustCompile(`^[a-f0-9]{32}$`).MatchString(traceID) {
-		t.Fatalf("fallback trace ID = %q", traceID)
-	}
+	// Then
+	require.Equal(t, http.StatusOK, recorder.Code)
+	requireSemanticEnvelope(t, recorder.Body.Bytes(), http.StatusInternalServerError, "INTERNAL")
+	require.Empty(t, recorder.Header().Get(middleware.TraceIDHeader))
+	require.False(t, downstreamCalled)
 }

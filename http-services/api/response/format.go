@@ -1,6 +1,7 @@
 package response
 
 import (
+	"encoding/json"
 	"net/http"
 	"time"
 
@@ -11,75 +12,71 @@ import (
 	"go.uber.org/zap"
 )
 
-func getTraceID(c *gin.Context) string {
-	if traceID, exists := c.Get(contextkey.TraceID); exists {
-		if id, ok := traceID.(string); ok {
-			return id
-		}
-	}
-	return ""
-}
-
 func ReturnErrorWithData(c *gin.Context, data responseData, result interface{}) {
-	l := log.FromContext(c)
-	data.Timestamp = time.Now().Unix()
-	data.TraceID = getTraceID(c)
-	data.Detail = result
-	c.JSON(http.StatusOK, data)
-	l.Error("Returning error response with data", zap.Any("response", data))
-	// Return directly
-	c.Abort()
+	write(c, data, result, true)
 }
 
 // ResponseOk
 func ReturnOk(c *gin.Context, result interface{}) {
-	l := log.FromContext(c)
-	data := OK
-	data.Timestamp = time.Now().Unix()
-	data.TraceID = getTraceID(c)
-	data.Detail = result
-	c.JSON(http.StatusOK, data)
-	l.Debug("Returning OK response", zap.Any("response", data))
-	// Return directly
-	c.Abort()
+	write(c, OK, result, false)
 }
 
 // ResponseOkWithTotal
 func ReturnOkWithTotal(c *gin.Context, total int, result interface{}) {
-	l := log.FromContext(c)
 	data := OK
-	data.Timestamp = time.Now().Unix()
-	data.TraceID = getTraceID(c)
-	data.Detail = result
 	data.Total = &total
-	c.JSON(http.StatusOK, data)
-	l.Debug("Returning OK response with total", zap.Any("response", data))
-	// Return directly
-	c.Abort()
+	write(c, data, result, false)
 }
 
 // ResponseError
 func ReturnError(c *gin.Context, data responseData, message string) {
-	l := log.FromContext(c)
-	data.Timestamp = time.Now().Unix()
-	data.TraceID = getTraceID(c)
 	if message != "" {
 		data.Message = message
 	}
-	c.JSON(http.StatusOK, data)
-	l.Error("Returning error response", zap.Any("response", data))
-	// Return directly
-	c.Abort()
+	write(c, data, nil, true)
 }
 
 // ResponseSuccess
 func ReturnSuccess(c *gin.Context) {
-	l := log.FromContext(c)
-	data := OK
+	write(c, OK, nil, false)
+}
+
+func write(c *gin.Context, data responseData, detail interface{}, failed bool) {
 	data.Timestamp = time.Now().Unix()
-	data.TraceID = getTraceID(c)
-	c.JSON(http.StatusOK, data)
-	l.Debug("Returning success response", zap.Any("response", data))
-	// Return directly
+	data.TraceID = requestTraceID(c)
+	data.Detail = detail
+	encoded, err := json.Marshal(data)
+	if err != nil {
+		data = INTERNAL
+		data.Timestamp = time.Now().Unix()
+		data.TraceID = requestTraceID(c)
+		data.Message = "internal server error"
+		encoded, _ = json.Marshal(data)
+		failed = true
+	}
+	c.Data(http.StatusOK, "application/json; charset=utf-8", encoded)
 	c.Abort()
+	logger := log.FromContext(c)
+	fields := []zap.Field{zap.Int("code", data.Code), zap.String("status", data.Status)}
+	if failed {
+		logger.Error("http.response", fields...)
+		return
+	}
+	logger.Debug("http.response", fields...)
+}
+
+func requestTraceID(c *gin.Context) string {
+	if c == nil {
+		return ""
+	}
+	if c.Request != nil {
+		if traceID, ok := log.TraceID(c.Request.Context()); ok {
+			return traceID
+		}
+	}
+	if traceID, exists := c.Get(contextkey.TraceID); exists {
+		value, _ := traceID.(string)
+		return value
+	}
+	return ""
 }

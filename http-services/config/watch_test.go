@@ -5,42 +5,58 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/spf13/viper"
+	"github.com/stretchr/testify/require"
 )
 
-func TestStopWatchConfigWaitsForWatcherAndAllowsRestart(t *testing.T) {
-	originalViper := v
-	t.Cleanup(func() {
-		StopWatchConfig()
-		v = originalViper
-	})
+func Test_LogWatcher_reloads_only_valid_log_snapshot(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	require.NoError(t, os.WriteFile(path, []byte("log:\n  level: info\n  gin_level: warn\n  max_size: 50\n  max_age: 30\n"), 0o600))
+	var received LogConfig
+	watcher := &LogWatcher{configFile: path, onChange: func(next LogConfig) error {
+		received = next
+		return nil
+	}}
+	require.NoError(t, os.WriteFile(path, []byte("server:\n  port: 1\nlog:\n  level: debug\n  gin_level: error\n  max_size: 100\n  max_age: 60\n"), 0o600))
 
-	configPath := filepath.Join(t.TempDir(), "config.yaml")
-	if err := os.WriteFile(configPath, []byte("log:\n  level: info\n"), 0o600); err != nil {
-		t.Fatalf("write config: %v", err)
-	}
-	v = viper.New()
-	v.SetConfigFile(configPath)
-	if err := v.ReadInConfig(); err != nil {
-		t.Fatalf("read config: %v", err)
-	}
+	err := watcher.reload()
 
-	for iteration := range 2 {
-		if err := WatchConfig(nil); err != nil {
-			t.Fatalf("start watcher %d: %v", iteration, err)
-		}
-		watchConfigMu.Lock()
-		running := activeConfigWatcher
-		watchConfigMu.Unlock()
-		if running == nil {
-			t.Fatalf("watcher %d was not registered", iteration)
-		}
+	require.NoError(t, err)
+	require.Equal(t, LogLevelDebug, received.Level)
+	require.Equal(t, LogLevelError, received.GinLevel)
+	require.Equal(t, LogFileSizeMB(100), received.MaxSize)
+	require.Equal(t, LogRetentionDays(60), received.MaxAge)
+}
 
-		StopWatchConfig()
+func Test_LogWatcher_rejects_invalid_log_reload(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	require.NoError(t, os.WriteFile(path, []byte("log:\n  level: verbose\n  max_size: 50\n  max_age: 30\n"), 0o600))
+	called := false
+	watcher := &LogWatcher{configFile: path, onChange: func(LogConfig) error {
+		called = true
+		return nil
+	}}
+
+	err := watcher.reload()
+
+	require.Error(t, err)
+	require.False(t, called)
+}
+
+func Test_LogWatcher_close_joins_and_allows_independent_restart(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	require.NoError(t, os.WriteFile(path, []byte("log:\n  level: info\n"), 0o600))
+	initial := LogConfig{Level: "info", MaxSize: 50, MaxAge: 30, sourcePath: path}
+
+	for range 2 {
+		watcher, err := WatchLogConfig(initial, nil)
+		require.NoError(t, err)
+		require.NotNil(t, watcher.watcher)
+
+		require.NoError(t, watcher.Close())
 		select {
-		case <-running.stopped:
+		case <-watcher.stopped:
 		default:
-			t.Fatalf("watcher %d was not joined", iteration)
+			t.Fatal("watcher was not joined")
 		}
 	}
 }

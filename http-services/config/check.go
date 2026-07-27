@@ -32,6 +32,31 @@ func validateJWTConfig(jwtKey string, jwtExpiration int64) error {
 	return nil
 }
 
+func (config LogConfig) validate() error {
+	if config.MaxSize < 1 || config.MaxSize > 10240 {
+		return fmt.Errorf("log.max_size must be between 1 and 10240 megabytes")
+	}
+	if config.MaxAge < 1 || config.MaxAge > 3650 {
+		return fmt.Errorf("log.max_age must be between 1 and 3650 days")
+	}
+	if !validLogLevel(config.Level) {
+		return fmt.Errorf("log.level must be debug, info, warn, or error")
+	}
+	if config.GinLevel != "" && !validLogLevel(config.GinLevel) {
+		return fmt.Errorf("log.gin_level must be empty, debug, info, warn, or error")
+	}
+	return nil
+}
+
+func validLogLevel(level LogLevel) bool {
+	switch level {
+	case LogLevelDebug, LogLevelInfo, LogLevelWarn, LogLevelError:
+		return true
+	default:
+		return false
+	}
+}
+
 // ValidateConfig 校验关键配置项并向调用方返回错误。
 func ValidateConfig(jwtKey string, jwtExpiration int64) error {
 	return validateJWTConfig(jwtKey, jwtExpiration)

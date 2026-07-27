@@ -8,6 +8,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"http-services/config"
 )
 
 var (
@@ -31,7 +33,7 @@ func TestRunMigrationInitializesMigratesAndCleansUp(t *testing.T) {
 	if !errors.Is(err, errMigrate) {
 		t.Fatalf("Run() error = %v, want %v", err, errMigrate)
 	}
-	fixture.requireEvents(t, "initialize", "migrate", "cleanup")
+	fixture.requireEvents(t, "initialize", "mysql.new", "migrate", "mysql.close", "cleanup")
 }
 
 func TestRunHandlerFailureDoesNotStartServerOrListener(t *testing.T) {
@@ -46,7 +48,7 @@ func TestRunHandlerFailureDoesNotStartServerOrListener(t *testing.T) {
 	if !errors.Is(err, errHandler) {
 		t.Fatalf("Run() error = %v, want %v", err, errHandler)
 	}
-	fixture.requireEvents(t, "initialize", "handler", "cleanup")
+	fixture.requireEvents(t, "initialize", "mysql.new", "redis.new", "handler", "redis.close", "mysql.close", "cleanup")
 }
 
 func TestRunListenerFailureDoesNotWritePID(t *testing.T) {
@@ -61,7 +63,11 @@ func TestRunListenerFailureDoesNotWritePID(t *testing.T) {
 	if !errors.Is(err, errListen) {
 		t.Fatalf("Run() error = %v, want %v", err, errListen)
 	}
-	fixture.requireEvents(t, "initialize", "handler", "server", "listen", "cleanup")
+	fixture.requireEvents(
+		t,
+		"initialize", "mysql.new", "redis.new", "handler", "server", "listen",
+		"redis.close", "mysql.close", "cleanup",
+	)
 }
 
 func TestRunPIDFailureClosesAcquiredListener(t *testing.T) {
@@ -76,7 +82,11 @@ func TestRunPIDFailureClosesAcquiredListener(t *testing.T) {
 	if !errors.Is(err, errPID) {
 		t.Fatalf("Run() error = %v, want %v", err, errPID)
 	}
-	fixture.requireEvents(t, "initialize", "handler", "server", "listen", "pid.write", "listener.close", "cleanup")
+	fixture.requireEvents(
+		t,
+		"initialize", "mysql.new", "redis.new", "handler", "server", "listen", "pid.write", "listener.close",
+		"redis.close", "mysql.close", "cleanup",
+	)
 }
 
 func TestRunCancellationShutsDownServerAndRemovesPID(t *testing.T) {
@@ -87,14 +97,14 @@ func TestRunCancellationShutsDownServerAndRemovesPID(t *testing.T) {
 
 	// When
 	err := Run(ctx, Options{PID: 42, Dependencies: fixture.dependencies()})
-
 	// Then
 	if err != nil {
 		t.Fatalf("Run() error = %v", err)
 	}
-	fixture.requireEvents(t,
-		"initialize", "handler", "server", "listen", "pid.write", "serve", "shutdown",
-		"listener.close", "pid.remove", "cleanup",
+	fixture.requireEvents(
+		t,
+		"initialize", "mysql.new", "redis.new", "handler", "server", "listen", "pid.write", "serve", "shutdown",
+		"listener.close", "pid.remove", "redis.close", "mysql.close", "cleanup",
 	)
 }
 
@@ -111,9 +121,10 @@ func TestRunUnexpectedServerReturnFailsAndCleansUp(t *testing.T) {
 	if !errors.Is(err, ErrServeReturned) || !errors.Is(err, errServe) {
 		t.Fatalf("Run() error = %v, want ErrServeReturned and %v", err, errServe)
 	}
-	fixture.requireEvents(t,
-		"initialize", "handler", "server", "listen", "pid.write", "serve", "server.close",
-		"listener.close", "pid.remove", "cleanup",
+	fixture.requireEvents(
+		t,
+		"initialize", "mysql.new", "redis.new", "handler", "server", "listen", "pid.write", "serve", "server.close",
+		"listener.close", "pid.remove", "redis.close", "mysql.close", "cleanup",
 	)
 }
 
@@ -131,9 +142,10 @@ func TestRunShutdownFailureForcesCloseAndReturnsBothErrors(t *testing.T) {
 	if !errors.Is(err, errShutdown) {
 		t.Fatalf("Run() error = %v, want %v", err, errShutdown)
 	}
-	fixture.requireEvents(t,
-		"initialize", "handler", "server", "listen", "pid.write", "serve", "shutdown",
-		"server.close", "listener.close", "pid.remove", "cleanup",
+	fixture.requireEvents(
+		t,
+		"initialize", "mysql.new", "redis.new", "handler", "server", "listen", "pid.write", "serve", "shutdown",
+		"server.close", "listener.close", "pid.remove", "redis.close", "mysql.close", "cleanup",
 	)
 }
 
@@ -146,12 +158,16 @@ type fixture struct {
 	handlerErr error
 	listener   *fakeListener
 	server     *fakeServer
+	mysql      *fakeResource
+	redis      *fakeResource
 }
 
 func newFixture() *fixture {
 	fixture := &fixture{}
 	fixture.listener = &fakeListener{record: fixture.record}
 	fixture.server = &fakeServer{record: fixture.record, done: make(chan struct{})}
+	fixture.mysql = &fakeResource{name: "mysql", record: fixture.record}
+	fixture.redis = &fakeResource{name: "redis", record: fixture.record}
 	return fixture
 }
 
@@ -159,22 +175,45 @@ func (f *fixture) dependencies() Dependencies {
 	return Dependencies{
 		Initialize: func(bool) (RuntimeConfig, error) {
 			f.record("initialize")
-			return RuntimeConfig{Address: "127.0.0.1:0", PIDFile: "service.pid", ShutdownTimeout: time.Second}, nil
+			return RuntimeConfig{
+				Address: "127.0.0.1:0", PIDFile: "service.pid", ShutdownTimeout: time.Second,
+				MySQLDSN: "mysql-dsn", Redis: config.RedisConfig{Host: "redis:6379"},
+			}, nil
 		},
-		Migrate: func() error { f.record("migrate"); return f.migrateErr },
-		NewHandler: func(RuntimeConfig) (http.Handler, error) {
+		NewMySQL: func(context.Context, string) (Resource, error) {
+			f.record("mysql.new")
+			return f.mysql, nil
+		},
+		NewRedis: func(context.Context, config.RedisConfig) (Resource, error) {
+			f.record("redis.new")
+			return f.redis, nil
+		},
+		Migrate: func(context.Context, Resource) error { f.record("migrate"); return f.migrateErr },
+		NewHandler: func(RuntimeConfig, Resources) (http.Handler, error) {
 			f.record("handler")
 			return http.NewServeMux(), f.handlerErr
 		},
+		NewWorker: func(RuntimeConfig, Resources) (Worker, error) { return disabledWorker{}, nil },
 		NewServer: func(RuntimeConfig, http.Handler) Server { f.record("server"); return f.server },
 		Listen: func(string, string) (net.Listener, error) {
 			f.record("listen")
 			return f.listener, f.listenErr
 		},
 		WritePID:  func(string, int) error { f.record("pid.write"); return f.pidErr },
-		RemovePID: func(string) error { f.record("pid.remove"); return nil },
-		Cleanup:   func() { f.record("cleanup") },
+		RemovePID: func(string, int) error { f.record("pid.remove"); return nil },
+		Cleanup:   func() error { f.record("cleanup"); return nil },
 	}
+}
+
+type fakeResource struct {
+	name   string
+	record func(string)
+}
+
+func (*fakeResource) Ping(context.Context) error { return nil }
+func (r *fakeResource) Close() error {
+	r.record(r.name + ".close")
+	return nil
 }
 
 func (f *fixture) record(event string) {

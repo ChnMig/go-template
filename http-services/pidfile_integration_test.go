@@ -33,7 +33,8 @@ func TestPidFileLifecycle(t *testing.T) {
 
 	cmd := exec.Command(binPath, "--dev")
 	cmd.Dir = tmpDir
-	cmd.Env = append(os.Environ(),
+	cmd.Env = append(
+		os.Environ(),
 		"HTTP_SERVICES_SERVER_PORT="+port,
 		"HTTP_SERVICES_SERVER_SHUTDOWN_TIMEOUT=1s",
 		"HTTP_SERVICES_JWT_KEY=0123456789abcdef0123456789abcdef",
@@ -52,7 +53,7 @@ func TestPidFileLifecycle(t *testing.T) {
 	t.Cleanup(func() {
 		if cmd.Process != nil && cmd.ProcessState == nil {
 			_ = cmd.Process.Kill()
-			_ = <-waitCh
+			<-waitCh
 		}
 	})
 
@@ -90,7 +91,7 @@ func TestPidFileLifecycle(t *testing.T) {
 		}
 	case <-time.After(5 * time.Second):
 		_ = cmd.Process.Kill()
-		_ = <-waitCh
+		<-waitCh
 		t.Fatalf("服务未在预期时间内退出\n输出：\n%s", out.String())
 	}
 
@@ -106,7 +107,11 @@ func reserveLocalPort(t *testing.T) string {
 	if err != nil {
 		t.Skipf("当前环境无法分配本地监听端口，跳过进程生命周期集成测试: %v", err)
 	}
-	defer l.Close()
+	t.Cleanup(func() {
+		if err := l.Close(); err != nil {
+			t.Errorf("关闭预留监听端口失败: %v", err)
+		}
+	})
 
 	addr, ok := l.Addr().(*net.TCPAddr)
 	if !ok {

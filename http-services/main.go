@@ -26,7 +26,8 @@ var (
 
 func main() {
 	// 解析命令行参数
-	cliContext := kong.Parse(&CLI,
+	cliContext := kong.Parse(
+		&CLI,
 		kong.Name("http-services"),
 		kong.Description("HTTP API services"),
 		kong.UsageOnError(),

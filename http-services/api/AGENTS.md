@@ -16,6 +16,7 @@ Gin API layer. Owns engine initialization, global middleware order, versioned ro
 | Trace/logger injection | `middleware/trace-id.go` | Must run before access log and handlers |
 | Access log summary | `middleware/access-log.go` | Logs final status in defer; must wrap recovery |
 | Panic recovery | `middleware/recovery.go` | Writes unified internal response before access log defer records it |
+| Body limit | `middleware/body-limit.go` | Rejects known lengths and converts streamed `MaxBytesError` before commit |
 | JWT middleware | `middleware/jwt.go` | Stores decoded claims under `contextkey.JWTData` |
 | Rate limiting | `middleware/rate-limit.go` | IP/token/custom key, bounded lazy TTL cleanup without goroutines |
 | Pagination | `middleware/page.go` | Uses `config.DefaultPage*`; `-1` disables pagination |
@@ -46,6 +47,7 @@ TraceID -> AccessLog -> Recovery -> optional CORS -> optional IPRateLimit -> Sec
 ```
 
 - `TraceID` must stay first so downstream logs/responses can include trace_id.
+- Trace IDs are canonical 36-character UUIDv7 values; only canonical incoming UUIDs are reused.
 - `AccessLog` must wrap `Recovery`; its defer logs the final status and response size after recovery writes.
 - `Recovery` must preserve committed responses; only pre-write application panics use `response.ReturnError(... INTERNAL ...)`.
 - CORS preflight must abort with 204 before rate limiting and business handlers.
@@ -57,7 +59,7 @@ TraceID -> AccessLog -> Recovery -> optional CORS -> optional IPRateLimit -> Sec
 - API success and errors both return HTTP 200; semantic result lives in JSON `code/status/message/detail/total`.
 - All response helpers inject `timestamp` and `trace_id` from context.
 - Use `response.ReturnOk`, `ReturnOkWithTotal`, `ReturnSuccess`, `ReturnError`, or `ReturnErrorWithData`.
-- Error responses should log internal context but return user-friendly messages.
+- Response logs contain only `code/status`; error responses return user-friendly messages and never log `detail`.
 
 ## ANTI-PATTERNS
 

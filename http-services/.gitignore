@@ -29,3 +29,30 @@ config.yaml
 .sisyphus/
 .suco-auggie/
 .omo/
+
+# Project-local tools and build outputs
+.tools/
+build/
+
+# Runtime and test artifacts
+*.pid
+logs/
+coverage/
+coverage.out
+coverage.html
+*.coverage
+*.test
+*.prof
+test-results/
+
+# Local configuration and secrets; examples remain trackable
+.env.*
+!.env.example
+config.local.yaml
+config.*.local.yaml
+!config.yaml.example
+.secrets/
+secrets/
+*.pem
+*.key
+/http-services

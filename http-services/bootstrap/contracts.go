@@ -17,10 +17,11 @@ var (
 	ErrServeReturned       = errors.New("bootstrap: HTTP server returned unexpectedly")
 )
 
-// RuntimeConfig 是启动时冻结的 HTTP 生命周期配置。
 type RuntimeConfig struct {
 	Address         string
 	PIDFile         string
+	MySQLDSN        string
+	Redis           config.RedisConfig
 	ShutdownTimeout time.Duration
 	ReadTimeout     time.Duration
 	WriteTimeout    time.Duration
@@ -29,26 +30,40 @@ type RuntimeConfig struct {
 	HTTP            config.HTTPConfig
 }
 
-// Server 是 bootstrap 管理的最小 HTTP server 接口。
+type Resource interface {
+	Ping(context.Context) error
+	Close() error
+}
+
+type Resources struct {
+	MySQL Resource
+	Redis Resource
+}
+
+type Worker interface {
+	Run(context.Context) error
+}
+
 type Server interface {
 	Serve(net.Listener) error
 	Shutdown(context.Context) error
 	Close() error
 }
 
-// Dependencies 提供生产实现和测试替身之间的窄边界。
 type Dependencies struct {
 	Initialize func(bool) (RuntimeConfig, error)
-	Migrate    func() error
-	NewHandler func(RuntimeConfig) (http.Handler, error)
+	NewMySQL   func(context.Context, string) (Resource, error)
+	NewRedis   func(context.Context, config.RedisConfig) (Resource, error)
+	Migrate    func(context.Context, Resource) error
+	NewHandler func(RuntimeConfig, Resources) (http.Handler, error)
+	NewWorker  func(RuntimeConfig, Resources) (Worker, error)
 	NewServer  func(RuntimeConfig, http.Handler) Server
 	Listen     func(string, string) (net.Listener, error)
 	WritePID   func(string, int) error
-	RemovePID  func(string) error
-	Cleanup    func()
+	RemovePID  func(string, int) error
+	Cleanup    func() error
 }
 
-// Options 控制一次独立的应用运行。
 type Options struct {
 	Dependencies Dependencies
 	PID          int

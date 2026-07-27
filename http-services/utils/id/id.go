@@ -14,8 +14,10 @@ import (
 	"github.com/sony/sonyflake"
 )
 
-var flake *sonyflake.Sonyflake
-var fallbackSeq uint64
+var (
+	flake       *sonyflake.Sonyflake
+	fallbackSeq uint64
+)
 
 // IssueID 生成唯一 ID (基于 Sony 改进的 Snowflake 算法)
 // https://github.com/sony/sonyflake

@@ -12,6 +12,7 @@ import (
 	"http-services/config"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
@@ -26,7 +27,7 @@ func TestNewRouterUsesInjectedDependencies(t *testing.T) {
 		zap.DebugLevel,
 	))
 	provider := middleware.LoggerProvider(func() *zap.Logger { return logger })
-	const traceID = "0123456789abcdef0123456789abcdef"
+	traceID := uuid.MustParse("018f47a5-7b8c-7c11-8000-123456789abc")
 	router, err := NewRouter(Options{
 		Server: config.HTTPConfig{MaxBodySize: 10 << 20},
 		Loggers: LoggerProviders{
@@ -34,7 +35,7 @@ func TestNewRouterUsesInjectedDependencies(t *testing.T) {
 			Access:  provider,
 			Error:   provider,
 		},
-		TraceIDFactory: func() string { return traceID },
+		IDFactory: func() (uuid.UUID, error) { return traceID, nil },
 		RegisterRoutes: func(group *gin.RouterGroup) {
 			group.GET("/injected", func(c *gin.Context) { c.String(http.StatusOK, "ok") })
 		},
@@ -48,10 +49,10 @@ func TestNewRouterUsesInjectedDependencies(t *testing.T) {
 	if w.Code != http.StatusOK || w.Body.String() != "ok" {
 		t.Fatalf("response = %d %q", w.Code, w.Body.String())
 	}
-	if got := w.Header().Get(middleware.TraceIDHeaderKey); got != traceID {
-		t.Fatalf("trace ID = %q, want %q", got, traceID)
+	if got := w.Header().Get(middleware.TraceIDHeaderKey); got != traceID.String() {
+		t.Fatalf("trace ID = %q, want %q", got, traceID.String())
 	}
-	if !strings.Contains(output.String(), "HTTP access") || !strings.Contains(output.String(), traceID) {
+	if !strings.Contains(output.String(), "http.request") || !strings.Contains(output.String(), traceID.String()) {
 		t.Fatalf("injected logger did not receive access log: %s", output.String())
 	}
 }
@@ -61,7 +62,7 @@ func TestNewRouterRejectsInvalidOptionsAndTrustedProxy(t *testing.T) {
 	valid := Options{
 		Server:         config.HTTPConfig{MaxBodySize: 10 << 20},
 		Loggers:        LoggerProviders{Context: provider, Access: provider, Error: provider},
-		TraceIDFactory: func() string { return "0123456789abcdef0123456789abcdef" },
+		IDFactory:      func() (uuid.UUID, error) { return uuid.NewV7() },
 		RegisterRoutes: func(*gin.RouterGroup) {},
 	}
 
@@ -75,7 +76,7 @@ func TestNewRouterRejectsInvalidOptionsAndTrustedProxy(t *testing.T) {
 		}},
 		{name: "missing access logger", mutate: func(options *Options) { options.Loggers.Access = nil }},
 		{name: "missing error logger", mutate: func(options *Options) { options.Loggers.Error = nil }},
-		{name: "missing trace factory", mutate: func(options *Options) { options.TraceIDFactory = nil }},
+		{name: "missing trace factory", mutate: func(options *Options) { options.IDFactory = nil }},
 		{name: "missing registrar", mutate: func(options *Options) { options.RegisterRoutes = nil }},
 		{name: "invalid trusted proxy", mutate: func(options *Options) {
 			options.Server.TrustedProxies = []string{"not-a-proxy"}

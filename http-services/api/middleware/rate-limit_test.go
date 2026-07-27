@@ -3,6 +3,7 @@ package middleware
 import (
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -83,7 +84,7 @@ func TestRateLimitWithOptionsUsesCustomKeyAndMessage(t *testing.T) {
 		t.Fatalf("业务 handler 执行 %d 次，want 2", handled)
 	}
 	assertRateLimited(t, limited)
-	if !contains(limited.Body.String(), "Custom rate limit exceeded") {
+	if !strings.Contains(limited.Body.String(), "Custom rate limit exceeded") {
 		t.Fatalf("限流响应未包含自定义文案: %s", limited.Body.String())
 	}
 }
@@ -143,7 +144,7 @@ func serveRateLimitRequest(router http.Handler, remoteAddr, userID, apiKey strin
 
 func assertRateLimited(t *testing.T, response *httptest.ResponseRecorder) {
 	t.Helper()
-	if !contains(response.Body.String(), "429") || !contains(response.Body.String(), "RESOURCE_EXHAUSTED") {
+	if !strings.Contains(response.Body.String(), "429") || !strings.Contains(response.Body.String(), "RESOURCE_EXHAUSTED") {
 		t.Fatalf("want RESOURCE_EXHAUSTED response, got %s", response.Body.String())
 	}
 }

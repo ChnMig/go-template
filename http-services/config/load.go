@@ -10,9 +10,9 @@ import (
 	"go.uber.org/zap"
 )
 
-var (
-	v *viper.Viper // Viper 实例
-)
+const environmentPrefix = "HTTP_SERVICES"
+
+var v *viper.Viper // Viper 实例
 
 // LoadConfig 使用 Viper 加载配置
 func LoadConfig() error {
@@ -26,7 +26,7 @@ func LoadConfig() error {
 	v.AddConfigPath("/etc/http-services/") // 系统目录
 
 	// 支持环境变量（自动转换：HTTP_SERVICES_SERVER_PORT）
-	v.SetEnvPrefix("HTTP_SERVICES")
+	v.SetEnvPrefix(environmentPrefix)
 	v.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
 	v.AutomaticEnv()
 
@@ -50,9 +50,33 @@ func LoadConfig() error {
 	return applyConfig()
 }
 
+// Load 返回生产启动路径使用的不可变配置快照。
+func Load() (Config, error) {
+	if err := LoadConfig(); err != nil {
+		return Config{}, err
+	}
+	snapshot := Config{
+		Server: ServerConfig{
+			Host: strings.TrimSpace(v.GetString("server.host")), Port: ListenPort, PIDFile: PidFile,
+			StaticDir: StaticDir, TrustedProxies: append([]string(nil), TrustedProxies...),
+			ReadTimeout: ReadTimeout, WriteTimeout: WriteTimeout, IdleTimeout: IdleTimeout,
+			ShutdownTimeout: ShutdownTimeout, MaxHeaderBytes: MaxHeaderBytes,
+			MaxBodySize: ByteSize(MaxBodySize), GlobalRateLimit: GlobalRateLimit,
+			GlobalRateBurst: GlobalRateBurst, EnableCORS: EnableCORS, EnableRateLimit: EnableRateLimit,
+		},
+		Log: CurrentLogConfig(), Database: DatabaseConfig{MySQLDSN: MysqlDSN},
+		Redis: SnapshotRedisConfig(), JWT: JWTConfig{Key: JWTKey, Expiration: JWTExpiration},
+	}
+	if err := snapshot.Validate(); err != nil {
+		return Config{}, err
+	}
+	return snapshot, nil
+}
+
 // setDefaults 设置默认配置值
 func setDefaults() {
 	// Server 默认配置
+	v.SetDefault("server.host", "0.0.0.0")
 	v.SetDefault("server.port", 8080)
 	v.SetDefault("server.max_body_size", "10MB")
 	v.SetDefault("server.max_header_bytes", 1<<20) // 1MB
@@ -81,7 +105,7 @@ func setDefaults() {
 	v.SetDefault("database.mysql_dsn", "")
 
 	// Redis 默认配置
-	v.SetDefault("redis.host", "127.0.0.1:6379")
+	v.SetDefault("redis.host", "")
 	v.SetDefault("redis.password", "")
 	v.SetDefault("redis.key_prefix", "")
 }
@@ -129,11 +153,11 @@ func applyConfig() error {
 	JWTExpiration = v.GetDuration("jwt.expiration")
 
 	// Log 配置
-	LogMaxSize = v.GetInt("log.max_size")
-	LogMaxAge = v.GetInt("log.max_age")
-	LogLevel = v.GetString("log.level")
-	GinLogLevel = v.GetString("log.gin_level")
-	UpdateLogConfig(logConfigFromViper())
+	nextLogConfig := logConfigFromViper()
+	if err := nextLogConfig.validate(); err != nil {
+		return err
+	}
+	UpdateLogConfig(nextLogConfig)
 
 	// Database 配置
 	MysqlDSN = v.GetString("database.mysql_dsn")
@@ -162,10 +186,11 @@ func (httpConfig HTTPConfig) Validate() error {
 
 func logConfigFromViper() LogConfig {
 	return LogConfig{
-		MaxSize:  v.GetInt("log.max_size"),
-		MaxAge:   v.GetInt("log.max_age"),
-		Level:    strings.TrimSpace(v.GetString("log.level")),
-		GinLevel: strings.TrimSpace(v.GetString("log.gin_level")),
+		MaxSize:    LogFileSizeMB(v.GetInt("log.max_size")),
+		MaxAge:     LogRetentionDays(v.GetInt("log.max_age")),
+		Level:      LogLevel(strings.TrimSpace(v.GetString("log.level"))),
+		GinLevel:   LogLevel(strings.TrimSpace(v.GetString("log.gin_level"))),
+		sourcePath: v.ConfigFileUsed(),
 	}
 }
 

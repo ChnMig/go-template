@@ -5,7 +5,6 @@ import "testing"
 // TestGetStatus 基础单元测试：验证健康状态的核心字段
 func TestGetStatus(t *testing.T) {
 	status, err := GetStatus()
-
 	if err != nil {
 		t.Fatalf("GetStatus() error = %v, want nil", err)
 	}

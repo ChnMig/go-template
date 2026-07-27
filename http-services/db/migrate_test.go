@@ -1,21 +1,20 @@
 package db
 
 import (
+	"context"
 	"errors"
 	"reflect"
 	"testing"
 
 	"gorm.io/gorm"
-
-	"http-services/config"
-	"http-services/db/msqldb"
 )
 
 func TestRunMigrators(t *testing.T) {
 	database := &gorm.DB{}
 	var order []string
 
-	err := RunMigrators(database,
+	err := RunMigrators(
+		database,
 		Migrator{Name: "first", Migrate: func(db *gorm.DB) error {
 			if db != database {
 				t.Fatalf("migrator received unexpected db")
@@ -61,12 +60,8 @@ func TestRunMigratorsWrapsMigratorError(t *testing.T) {
 	}
 }
 
-func TestMigrateAllRequiresMysqlDSN(t *testing.T) {
-	oldDSN := config.MysqlDSN
-	config.MysqlDSN = ""
-	t.Cleanup(func() { config.MysqlDSN = oldDSN })
-
-	if err := MigrateAll(); !errors.Is(err, msqldb.ErrMissingMysqlDSN) {
-		t.Fatalf("MigrateAll() error = %v, want %v", err, msqldb.ErrMissingMysqlDSN)
+func TestMigrateAllRequiresLifecycleOwnedDatabase(t *testing.T) {
+	if err := MigrateAll(context.Background(), nil); !errors.Is(err, gorm.ErrInvalidData) {
+		t.Fatalf("MigrateAll() error = %v, want %v", err, gorm.ErrInvalidData)
 	}
 }

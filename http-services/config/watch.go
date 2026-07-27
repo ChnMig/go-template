@@ -1,92 +1,78 @@
 package config
 
 import (
+	"errors"
 	"fmt"
 	"path/filepath"
+	"strings"
 	"sync"
 
 	"github.com/fsnotify/fsnotify"
+	"github.com/spf13/viper"
 	"go.uber.org/zap"
 )
 
-var (
-	watchConfigLifecycleMu sync.Mutex
-	watchConfigMu          sync.Mutex
-	activeConfigWatcher    *configWatcher
-)
+type envBinding struct {
+	key string
+	env string
+}
 
-type configWatcher struct {
+// LogWatcher owns one configuration-directory watcher and its goroutine.
+type LogWatcher struct {
 	watcher    *fsnotify.Watcher
 	configFile string
 	realFile   string
-	onChange   func()
+	onChange   func(LogConfig) error
 	done       chan struct{}
 	stopped    chan struct{}
 	stopOnce   sync.Once
 }
 
-// WatchConfig 启动一个可停止、可等待的配置 watcher；只有日志配置会被热更新。
-func WatchConfig(onChange func()) error {
-	watchConfigLifecycleMu.Lock()
-	defer watchConfigLifecycleMu.Unlock()
-	stopWatchConfigLocked()
-
-	if v == nil || v.ConfigFileUsed() == "" {
-		return nil
+// WatchLogConfig watches only the source file's log section.
+func WatchLogConfig(initial LogConfig, onChange func(LogConfig) error) (*LogWatcher, error) {
+	running := &LogWatcher{
+		onChange: onChange, done: make(chan struct{}), stopped: make(chan struct{}),
 	}
-	configFile, err := filepath.Abs(v.ConfigFileUsed())
+	path := strings.TrimSpace(initial.sourcePath)
+	if path == "" {
+		close(running.stopped)
+		return running, nil
+	}
+	absolutePath, err := filepath.Abs(path)
 	if err != nil {
-		return fmt.Errorf("resolve config file: %w", err)
+		return nil, fmt.Errorf("resolve config file: %w", err)
 	}
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
-		return fmt.Errorf("create config watcher: %w", err)
+		return nil, fmt.Errorf("create config watcher: %w", err)
 	}
-	if err := watcher.Add(filepath.Dir(configFile)); err != nil {
-		_ = watcher.Close()
-		return fmt.Errorf("watch config directory: %w", err)
+	if err := watcher.Add(filepath.Dir(absolutePath)); err != nil {
+		return nil, errors.Join(fmt.Errorf("watch config directory: %w", err), watcher.Close())
 	}
-	realFile, _ := filepath.EvalSymlinks(configFile)
-	running := &configWatcher{
-		watcher:    watcher,
-		configFile: filepath.Clean(configFile),
-		realFile:   realFile,
-		onChange:   onChange,
-		done:       make(chan struct{}),
-		stopped:    make(chan struct{}),
-	}
+	running.watcher = watcher
+	running.configFile = filepath.Clean(absolutePath)
+	running.realFile, _ = filepath.EvalSymlinks(absolutePath)
 	go running.run()
-	watchConfigMu.Lock()
-	activeConfigWatcher = running
-	watchConfigMu.Unlock()
+	return running, nil
+}
+
+// Close stops and joins the watcher goroutine.
+func (running *LogWatcher) Close() error {
+	if running == nil {
+		return nil
+	}
+	running.stopOnce.Do(func() { close(running.done) })
+	<-running.stopped
 	return nil
 }
 
-// StopWatchConfig 停止 watcher，并等待正在执行的配置回调退出。
-func StopWatchConfig() {
-	watchConfigLifecycleMu.Lock()
-	defer watchConfigLifecycleMu.Unlock()
-	stopWatchConfigLocked()
-}
-
-func stopWatchConfigLocked() {
-	watchConfigMu.Lock()
-	running := activeConfigWatcher
-	activeConfigWatcher = nil
-	watchConfigMu.Unlock()
-	if running != nil {
-		running.stop()
-	}
-}
-
-func (running *configWatcher) stop() {
-	running.stopOnce.Do(func() { close(running.done) })
-	<-running.stopped
-}
-
-func (running *configWatcher) run() {
+func (running *LogWatcher) run() {
 	defer close(running.stopped)
-	defer running.watcher.Close()
+	defer func() {
+		if err := running.watcher.Close(); err != nil {
+			zap.L().Warn("close config watcher failed", zap.Error(err))
+		}
+	}()
 	for {
 		select {
 		case event, ok := <-running.watcher.Events:
@@ -94,7 +80,9 @@ func (running *configWatcher) run() {
 				return
 			}
 			if running.shouldReload(event) {
-				running.reload(event)
+				if err := running.reload(); err != nil {
+					zap.L().Error("reload log configuration failed", zap.Error(err))
+				}
 			}
 		case err, ok := <-running.watcher.Errors:
 			if !ok {
@@ -107,28 +95,58 @@ func (running *configWatcher) run() {
 	}
 }
 
-func (running *configWatcher) shouldReload(event fsnotify.Event) bool {
+func (running *LogWatcher) shouldReload(event fsnotify.Event) bool {
 	currentRealFile, _ := filepath.EvalSymlinks(running.configFile)
 	realFileChanged := currentRealFile != "" && currentRealFile != running.realFile
 	if realFileChanged {
 		running.realFile = currentRealFile
 	}
 	sameFile := filepath.Clean(event.Name) == running.configFile
-	return realFileChanged || (sameFile && (event.Has(fsnotify.Write) || event.Has(fsnotify.Create)))
+	return realFileChanged || sameFile && (event.Has(fsnotify.Write) || event.Has(fsnotify.Create))
 }
 
-func (running *configWatcher) reload(event fsnotify.Event) {
-	zap.L().Info("Config file changed, reloading...",
-		zap.String("file", event.Name),
-		zap.String("op", event.Op.String()),
-	)
-	if err := v.ReadInConfig(); err != nil {
-		zap.L().Error("Config reload failed", zap.Error(err))
-		return
+func (running *LogWatcher) reload() error {
+	next, err := readLogConfig(running.configFile)
+	if err != nil {
+		return err
 	}
-	applyReloadableLogConfig()
 	if running.onChange != nil {
-		running.onChange()
+		if err := running.onChange(next); err != nil {
+			return fmt.Errorf("apply log configuration: %w", err)
+		}
 	}
-	zap.L().Info("Config reloaded successfully")
+	return nil
+}
+
+func readLogConfig(path string) (LogConfig, error) {
+	loader := viper.New()
+	loader.SetConfigFile(path)
+	loader.SetDefault("log.level", "info")
+	loader.SetDefault("log.gin_level", "")
+	loader.SetDefault("log.max_size", 50)
+	loader.SetDefault("log.max_age", 30)
+	loader.SetEnvPrefix(environmentPrefix)
+	loader.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
+	for _, binding := range []envBinding{
+		{"log.level", "LOG_LEVEL"},
+		{"log.gin_level", "LOG_GIN_LEVEL"},
+		{"log.max_size", "LOG_MAX_SIZE"},
+		{"log.max_age", "LOG_MAX_AGE"},
+	} {
+		if err := loader.BindEnv(binding.key, environmentPrefix+"_"+binding.env); err != nil {
+			return LogConfig{}, fmt.Errorf("bind log environment: %w", err)
+		}
+	}
+	if err := loader.ReadInConfig(); err != nil {
+		return LogConfig{}, fmt.Errorf("read log configuration: %w", err)
+	}
+	var next LogConfig
+	if err := loader.UnmarshalKey("log", &next); err != nil {
+		return LogConfig{}, fmt.Errorf("decode log configuration: %w", err)
+	}
+	next.sourcePath = path
+	if err := next.validate(); err != nil {
+		return LogConfig{}, err
+	}
+	return next, nil
 }
