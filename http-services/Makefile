@@ -1,116 +1,137 @@
-SHELL := /bin/bash
-export GOTOOLCHAIN := go1.26.5
+export GOTOOLCHAIN := go1.25.5
 
-TOOLS_BIN := $(CURDIR)/.tools/bin
-GOFUMPT := $(TOOLS_BIN)/gofumpt
-GOLANGCI_LINT := $(TOOLS_BIN)/golangci-lint
-NILAWAY := $(TOOLS_BIN)/nilaway
-MODULE := http-services
-BIN_NAME ?= http-services
-BIN_DIR ?= $(CURDIR)/bin
+.PHONY: build build-local build-cross run dev migrate clean clean-dist help test test-race fmt lint verify
 
+# 版本信息
 VERSION := $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
 BUILD_TIME := $(shell date -u '+%Y-%m-%d_%H:%M:%S')
 GIT_COMMIT := $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
+
+# 构建参数
 LDFLAGS := -X main.Version=$(VERSION) -X main.BuildTime=$(BUILD_TIME) -X main.GitCommit=$(GIT_COMMIT)
+BINARY_NAME := http-services
+# 产物名称（可通过 make build BIN_NAME=xxx 覆盖）
+OUTPUT_NAME := $(if $(BIN_NAME),$(BIN_NAME),$(BINARY_NAME))
 
+# 跨平台构建矩阵与产物目录
 PLATFORMS ?= linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64
-DIST_DIR ?= dist
+DIST_DIR := dist
 CGO_ENABLED ?= 0
+# 额外随包文件（存在才会被复制）
 PACKAGE_FILES ?= README.md config.yaml.example
-PACKAGE_DIRS ?= static
-
-.PHONY: help tools fmt fmt-check lint test test-race test-coverage test-integration pure-loc mod-verify build build-local build-cross build-check run dev migrate clean clean-dist version verify
 
 help: ## 显示帮助信息
 	@echo "可用命令:"
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-15s\033[0m %s\n", $$1, $$2}'
 
-tools:
-	env GOTOOLCHAIN=$(GOTOOLCHAIN) GOBIN="$(TOOLS_BIN)" go install mvdan.cc/gofumpt@v0.10.0
-	env GOTOOLCHAIN=$(GOTOOLCHAIN) GOBIN="$(TOOLS_BIN)" go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.12.2
-	env GOTOOLCHAIN=$(GOTOOLCHAIN) GOBIN="$(TOOLS_BIN)" go install go.uber.org/nilaway/cmd/nilaway@v0.0.0-20260709164232-fd97c8330720
+build: ## 构建生产版本（CROSS=1 启用跨平台打包，BIN_NAME=xxx 指定二进制名称）
+	@if [ "$(CROSS)" = "1" ]; then \
+	  $(MAKE) build-cross; \
+	else \
+	  $(MAKE) build-local; \
+	fi
 
-fmt:
-	$(GOFUMPT) -w .
-	env GOTOOLCHAIN=$(GOTOOLCHAIN) $(GOLANGCI_LINT) fmt
+build-local: ## 本地构建（默认）
+	@echo "构建 $(OUTPUT_NAME)..."
+	@mkdir -p bin
+	@go build -ldflags "$(LDFLAGS)" -o bin/$(OUTPUT_NAME) .
+	@echo "✓ 构建完成: bin/$(OUTPUT_NAME)"
 
-fmt-check:
-	@set -o pipefail; output="$$($(GOFUMPT) -l .)" || exit $$?; test -z "$$output" || { printf '%s\n' "$$output"; exit 1; }
-	env GOTOOLCHAIN=$(GOTOOLCHAIN) $(GOLANGCI_LINT) fmt --diff
+build-cross: clean-dist ## 跨平台构建并打包到 dist/
+	@echo "开始跨平台构建与打包: $(PLATFORMS)"
+	@mkdir -p $(DIST_DIR)
+	@set -e; \
+	for PLATFORM in $(PLATFORMS); do \
+	  OS=$${PLATFORM%/*}; ARCH=$${PLATFORM#*/}; \
+	  EXT=""; [ "$$OS" = "windows" ] && EXT=".exe"; \
+	  OUT_DIR="$(DIST_DIR)/$(OUTPUT_NAME)_$(VERSION)_$${OS}_$${ARCH}"; \
+	  echo "- 构建 $$OS/$$ARCH"; \
+	  mkdir -p "$$OUT_DIR"; \
+	  GOOS=$$OS GOARCH=$$ARCH CGO_ENABLED=$(CGO_ENABLED) \
+	    go build -trimpath -ldflags "$(LDFLAGS) -s -w" -o "$$OUT_DIR/$(OUTPUT_NAME)$$EXT" .; \
+	  for f in $(PACKAGE_FILES); do \
+	    [ -f "$$f" ] && cp "$$f" "$$OUT_DIR/" || true; \
+	  done; \
+	  if command -v zip >/dev/null 2>&1 && [ "$$OS" = "windows" ]; then \
+	    (cd "$(DIST_DIR)" && zip -q -r "$(OUTPUT_NAME)_$(VERSION)_$${OS}_$${ARCH}.zip" "$$(basename "$$OUT_DIR")"); \
+	  else \
+	    (cd "$(DIST_DIR)" && tar -czf "$(OUTPUT_NAME)_$(VERSION)_$${OS}_$${ARCH}.tar.gz" "$$(basename "$$OUT_DIR")"); \
+	  fi; \
+	  rm -rf "$$OUT_DIR"; \
+	done; \
+	echo "✓ 打包完成，产物位于 $(DIST_DIR)/"
 
-lint:
-	env GOTOOLCHAIN=$(GOTOOLCHAIN) $(GOLANGCI_LINT) run --timeout 5m ./...
-	env GOTOOLCHAIN=$(GOTOOLCHAIN) $(NILAWAY) -include-pkgs="$(MODULE)" ./...
-	env GOTOOLCHAIN=$(GOTOOLCHAIN) go vet ./...
+run: build-local ## 构建并运行（生产模式）
+	@echo "启动服务（生产模式）..."
+	@./bin/$(OUTPUT_NAME)
 
-test: ## 运行 race detector、随机顺序且不使用测试缓存
-	env GOTOOLCHAIN=$(GOTOOLCHAIN) go test -race -shuffle=on -count=1 ./...
+dev: build-local ## 构建并运行（开发模式）
+	@echo "启动服务（开发模式）..."
+	@./bin/$(OUTPUT_NAME) --dev
 
-test-race: test ## test 的兼容别名
+migrate: build-local ## 构建并执行数据库迁移
+	@echo "执行数据库迁移..."
+	@./bin/$(OUTPUT_NAME) --migrate
 
-test-coverage: ## 运行覆盖率测试并生成 coverage.out
-	env GOTOOLCHAIN=$(GOTOOLCHAIN) go test -coverprofile=coverage.out -covermode=atomic ./...
-	env GOTOOLCHAIN=$(GOTOOLCHAIN) go tool cover -func=coverage.out
+clean: ## 清理构建文件
+	@echo "清理构建文件..."
+	@rm -rf bin/
+	@rm -f $(OUTPUT_NAME)
+	@echo "✓ 清理完成"
 
-test-integration:
-	env GOTOOLCHAIN=$(GOTOOLCHAIN) go test -tags=integration -race -shuffle=on -count=1 ./...
+clean-dist: ## 清理打包产物（dist/）
+	@rm -rf $(DIST_DIR)
+	@echo "✓ 已清理 $(DIST_DIR)/"
 
-pure-loc:
-	env GOTOOLCHAIN=$(GOTOOLCHAIN) go run ./tools/check-pure-loc -max 250
-
-mod-verify:
-	env GOTOOLCHAIN=$(GOTOOLCHAIN) go mod verify
-
-build:
-	@if [ "$(CROSS)" = "1" ]; then $(MAKE) build-cross; else $(MAKE) build-local; fi
-
-build-local:
-	mkdir -p "$(BIN_DIR)"
-	env GOTOOLCHAIN=$(GOTOOLCHAIN) go build -trimpath -ldflags "$(LDFLAGS)" -o "$(BIN_DIR)/$(BIN_NAME)" .
-
-build-cross: clean-dist
-	@mkdir -p "$(DIST_DIR)"
-	@set -e; for platform in $(PLATFORMS); do \
-		os="$${platform%/*}"; arch="$${platform#*/}"; extension=""; \
-		[ "$$os" = "windows" ] && extension=".exe"; \
-		output_dir="$(DIST_DIR)/$(BIN_NAME)_$(VERSION)_$${os}_$${arch}"; \
-		mkdir -p "$$output_dir"; \
-		GOOS="$$os" GOARCH="$$arch" CGO_ENABLED=$(CGO_ENABLED) GOTOOLCHAIN=$(GOTOOLCHAIN) \
-			go build -trimpath -ldflags "$(LDFLAGS) -s -w" -o "$$output_dir/$(BIN_NAME)$$extension" .; \
-		for file in $(PACKAGE_FILES); do [ -f "$$file" ] && cp "$$file" "$$output_dir/" || true; done; \
-		for directory in $(PACKAGE_DIRS); do [ -d "$$directory" ] && cp -R "$$directory" "$$output_dir/" || true; done; \
-		if command -v zip >/dev/null 2>&1 && [ "$$os" = "windows" ]; then \
-			(cd "$(DIST_DIR)" && zip -q -r "$(BIN_NAME)_$(VERSION)_$${os}_$${arch}.zip" "$$(basename "$$output_dir")"); \
-		else \
-			(cd "$(DIST_DIR)" && tar -czf "$(BIN_NAME)_$(VERSION)_$${os}_$${arch}.tar.gz" "$$(basename "$$output_dir")"); \
-		fi; \
-		rm -rf "$$output_dir"; \
-	done
-
-build-check:
-	@tmp_dir="$$(mktemp -d "$${TMPDIR:-/tmp}/$(BIN_NAME)-build.XXXXXX")"; trap 'rm -rf "$$tmp_dir"' EXIT INT TERM; env GOTOOLCHAIN=$(GOTOOLCHAIN) go build -trimpath -ldflags "$(LDFLAGS)" -o "$$tmp_dir/" ./...
-
-run: build-local
-	"$(BIN_DIR)/$(BIN_NAME)"
-
-dev: build-local
-	"$(BIN_DIR)/$(BIN_NAME)" --dev
-
-migrate: build-local
-	"$(BIN_DIR)/$(BIN_NAME)" --migrate
-
-clean:
-	rm -rf "$(BIN_DIR)"
-
-clean-dist:
-	rm -rf "$(DIST_DIR)"
-
-version:
+version: ## 显示版本信息
 	@echo "Version:    $(VERSION)"
 	@echo "Build Time: $(BUILD_TIME)"
 	@echo "Git Commit: $(GIT_COMMIT)"
 
-verify: fmt-check lint test pure-loc mod-verify build-check
+test: ## 运行测试并显示覆盖率（含中文提示与结果解析）
+	@echo "运行测试（带覆盖率）..."
+	@OUT=$$(mktemp -t go-test-XXXXXX); \
+	trap 'rm -f "$$OUT"' EXIT; \
+	if go test -v -coverprofile=coverage.out -covermode=atomic ./... >"$$OUT" 2>&1; then \
+	  STATUS=0; \
+	else \
+	  STATUS=$$?; \
+	fi; \
+	cat "$$OUT"; \
+	PASS_PKGS=$$(grep -c '^ok[[:space:]]' "$$OUT" || true); \
+	FAIL_PKGS=$$(grep -c '^FAIL[[:space:]]' "$$OUT" || true); \
+	TOTAL_PKGS=$$((PASS_PKGS+FAIL_PKGS)); \
+	PASS_TESTS=$$(grep -c '^--- PASS:' "$$OUT" || true); \
+	FAIL_TESTS=$$(grep -c '^--- FAIL:' "$$OUT" || true); \
+	SKIP_TESTS=$$(grep -c '^--- SKIP:' "$$OUT" || true); \
+	if [ -f coverage.out ]; then \
+	  TOTAL_COV=$$(go tool cover -func=coverage.out | awk '/^total:/ {print $$3}'); \
+	else \
+	  TOTAL_COV="N/A"; \
+	fi; \
+	echo "测试汇总：包 总数=$$TOTAL_PKGS 通过=$$PASS_PKGS 失败=$$FAIL_PKGS"; \
+	echo "用例汇总：通过=$$PASS_TESTS 失败=$$FAIL_TESTS 跳过=$$SKIP_TESTS"; \
+	echo "总覆盖率：$$TOTAL_COV"; \
+	exit $$STATUS
+
+test-race: ## 使用 race detector 与随机顺序运行测试
+	@echo "运行 race + shuffle 测试..."
+	@go test -race -shuffle=on -count=1 ./...
+
+fmt: ## 格式化代码
+	@echo "格式化代码..."
+	@gofmt -w $$(find . -name "*.go" -not -path "./vendor/*")
+	@echo "✓ 格式化完成"
+
+lint: ## 运行代码检查（go vet）
+	@echo "运行 go vet..."
+	@go vet ./...
+	@echo "✓ 检查完成"
+
+verify: ## 验证：fmt -> lint -> test -> test-race
+	@$(MAKE) fmt
+	@$(MAKE) lint
+	@$(MAKE) test
+	@$(MAKE) test-race
 
 .DEFAULT_GOAL := help

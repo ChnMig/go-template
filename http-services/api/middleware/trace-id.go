@@ -1,54 +1,54 @@
-// Package middleware provides the service's ordered HTTP middleware chain.
 package middleware
 
 import (
 	"strings"
 
-	"github.com/gin-gonic/gin"
-	"github.com/google/uuid"
-
-	"go.uber.org/zap"
 	"http-services/api/response"
 	"http-services/utils/contextkey"
 	"http-services/utils/id"
-	serviceLog "http-services/utils/log"
+
+	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
+	"go.uber.org/zap"
 )
 
-// TraceIDHeader is the request and response correlation header.
-const TraceIDHeader = serviceLog.TraceIDHeader
-
 const (
-	TraceIDHeaderKey  = TraceIDHeader
+	TraceIDHeaderKey  = contextkey.TraceIDHeader
 	TraceIDContextKey = contextkey.TraceID
 )
 
-// TraceID validates or generates a trace identifier and adds it to request context.
 func TraceID() gin.HandlerFunc {
-	return func(context *gin.Context) {
-		traceID := context.GetHeader(TraceIDHeader)
+	return func(c *gin.Context) {
+		traceID := c.GetHeader(TraceIDHeaderKey)
 		parsedTraceID, parseErr := uuid.Parse(traceID)
 		validTraceID := parseErr == nil && len(traceID) == 36 && strings.EqualFold(parsedTraceID.String(), traceID)
 		if !validTraceID {
-			generated, generationErr := id.GenerateUUIDv7()
-			if generationErr != nil {
-				response.ReturnError(context, response.INTERNAL, "internal server error")
+			generated, err := id.GenerateUUIDv7()
+			if err != nil {
+				zap.L().Error("generate trace ID failed", zap.Error(err))
+				response.ReturnError(c, response.INTERNAL, "internal server error")
 				return
 			}
 			traceID = generated.String()
 		}
 
-		context.Set(contextkey.TraceID, traceID)
-		context.Request = context.Request.WithContext(serviceLog.WithTraceID(context.Request.Context(), traceID))
-		context.Header(TraceIDHeader, traceID)
-		requestLogger := zap.L().With(
+		c.Set(TraceIDContextKey, traceID)
+		c.Header(TraceIDHeaderKey, traceID)
+
+		contextLogger := zap.L().With(
 			zap.String("trace_id", traceID),
-			zap.String(logKeyMethod, context.Request.Method),
-			zap.String(logKeyPath, context.Request.URL.Path),
-			zap.String(logKeyClientIP, context.ClientIP()),
+			zap.String("method", c.Request.Method),
+			zap.String("path", c.Request.URL.Path),
+			zap.String("client_ip", c.ClientIP()),
 		)
-		context.Set(contextkey.Logger, requestLogger)
-		requestLogger.Debug("http.request.started")
-		context.Next()
-		requestLogger.Debug("http.request.completed", zap.Int(logKeyStatus, context.Writer.Status()))
+		c.Set(contextkey.Logger, contextLogger)
+
+		contextLogger.Debug("Request started")
+
+		c.Next()
+
+		contextLogger.Debug("Request completed",
+			zap.Int("status_code", c.Writer.Status()),
+		)
 	}
 }

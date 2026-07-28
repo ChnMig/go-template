@@ -24,7 +24,7 @@ func TestValidateJWTConfig(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := ValidateConfig(tt.key, tt.expiration)
+			err := validateJWTConfig(tt.key, tt.expiration)
 			if tt.wantErr && err == nil {
 				t.Fatal("expected validation error")
 			}

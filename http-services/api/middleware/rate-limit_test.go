@@ -1,9 +1,7 @@
 package middleware
 
 import (
-	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 	"time"
 
@@ -12,139 +10,191 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func TestIPRateLimitUsesIndependentClientBuckets(t *testing.T) {
+func TestIPRateLimit(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
-	handled := 0
+	// 创建测试路由
 	router := gin.New()
-	router.Use(IPRateLimit(1, 1))
+	router.Use(IPRateLimit(2, 3)) // 每秒2个请求，突发3个
 	router.GET("/test", func(c *gin.Context) {
-		handled++
-		c.Status(http.StatusNoContent)
+		c.JSON(200, gin.H{"message": "ok"})
 	})
 
-	serveRateLimitRequest(router, "192.0.2.1:1000", "", "")
-	limited := serveRateLimitRequest(router, "192.0.2.1:1001", "", "")
-	serveRateLimitRequest(router, "192.0.2.2:1000", "", "")
+	// 测试突发请求
+	for i := 0; i < 3; i++ {
+		req := httptest.NewRequest("GET", "/test", nil)
+		req.RemoteAddr = "192.168.1.1:12345"
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
 
-	if handled != 2 {
-		t.Fatalf("业务 handler 执行 %d 次，want 2", handled)
+		if w.Code != 200 {
+			t.Errorf("Request %d failed: expected 200, got %d", i+1, w.Code)
+		}
 	}
-	assertRateLimited(t, limited)
+
+	// 第4个请求应该被限流
+	req := httptest.NewRequest("GET", "/test", nil)
+	req.RemoteAddr = "192.168.1.1:12345"
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	// response.ReturnError 返回 HTTP 200，错误信息在 body 中
+	if w.Code != 200 {
+		t.Errorf("Expected 200, got %d", w.Code)
+	}
+	// 验证响应体包含 429 错误码
+	if !contains(w.Body.String(), "429") || !contains(w.Body.String(), "RESOURCE_EXHAUSTED") {
+		t.Errorf("Expected RESOURCE_EXHAUSTED error in body, got: %s", w.Body.String())
+	}
+
+	// 等待令牌恢复
+	time.Sleep(time.Second)
+
+	// 应该可以再次请求
+	req = httptest.NewRequest("GET", "/test", nil)
+	req.RemoteAddr = "192.168.1.1:12345"
+	w = httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != 200 {
+		t.Errorf("Request after cooldown failed: expected 200, got %d", w.Code)
+	}
 }
 
-func TestTokenRateLimitUsesJWTIdentity(t *testing.T) {
+func TestTokenRateLimit(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
-	handled := 0
+	// 创建测试路由
 	router := gin.New()
-	router.Use(func(c *gin.Context) {
-		c.Set(contextkey.JWTData, map[string]interface{}{"user_id": c.GetHeader("X-User-ID")})
-		c.Next()
-	})
-	router.Use(TokenRateLimit(1, 1))
+	router.Use(TokenRateLimit(1, 2)) // 每秒1个请求，突发2个
 	router.GET("/test", func(c *gin.Context) {
-		handled++
-		c.Status(http.StatusNoContent)
+		// 模拟 JWT 中间件设置的数据
+		c.Set(contextkey.JWTData, map[string]interface{}{"user_id": "user123"})
+		c.JSON(200, gin.H{"message": "ok"})
 	})
 
-	serveRateLimitRequest(router, "192.0.2.1:1000", "user-a", "")
-	serveRateLimitRequest(router, "192.0.2.1:1000", "user-b", "")
-	limited := serveRateLimitRequest(router, "192.0.2.1:1000", "user-a", "")
+	// 测试突发请求
+	for i := 0; i < 2; i++ {
+		req := httptest.NewRequest("GET", "/test", nil)
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
 
-	if handled != 2 {
-		t.Fatalf("业务 handler 执行 %d 次，want 2", handled)
+		if w.Code != 200 {
+			t.Errorf("Request %d failed: expected 200, got %d", i+1, w.Code)
+		}
 	}
-	assertRateLimited(t, limited)
+
+	// 第3个请求应该被限流
+	req := httptest.NewRequest("GET", "/test", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	// response.ReturnError 返回 HTTP 200，错误信息在 body 中
+	if w.Code != 200 {
+		t.Errorf("Expected 200, got %d", w.Code)
+	}
+	// 验证响应体包含 429 错误码
+	if !contains(w.Body.String(), "429") || !contains(w.Body.String(), "RESOURCE_EXHAUSTED") {
+		t.Errorf("Expected RESOURCE_EXHAUSTED error in body, got: %s", w.Body.String())
+	}
 }
 
-func TestRateLimitWithOptionsUsesCustomKeyAndMessage(t *testing.T) {
+func TestRateLimitWithOptions(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
-	handled := 0
+	// 创建测试路由，使用自定义 key 函数
 	router := gin.New()
 	router.Use(RateLimitWithOptions(RateLimitOptions{
 		Rate:  1,
-		Burst: 1,
+		Burst: 2,
 		KeyFunc: func(c *gin.Context) string {
 			return c.GetHeader("X-API-Key")
 		},
 		Message: "Custom rate limit exceeded",
 	}))
 	router.GET("/test", func(c *gin.Context) {
-		handled++
-		c.Status(http.StatusNoContent)
+		c.JSON(200, gin.H{"message": "ok"})
 	})
 
-	serveRateLimitRequest(router, "192.0.2.1:1000", "", "key-a")
-	serveRateLimitRequest(router, "192.0.2.1:1000", "", "key-b")
-	limited := serveRateLimitRequest(router, "192.0.2.1:1000", "", "key-a")
-
-	if handled != 2 {
-		t.Fatalf("业务 handler 执行 %d 次，want 2", handled)
-	}
-	assertRateLimited(t, limited)
-	if !strings.Contains(limited.Body.String(), "Custom rate limit exceeded") {
-		t.Fatalf("限流响应未包含自定义文案: %s", limited.Body.String())
-	}
-}
-
-func TestRateLimiterLazilyRemovesExpiredEntries(t *testing.T) {
-	limiter := NewRateLimiter(10, 20)
-	limiter.ttl = time.Minute
-	limiter.maxEntries = 10
-
-	startedAt := time.Unix(1_000, 0)
-	limiter.allowAt("old-a", startedAt)
-	limiter.allowAt("old-b", startedAt)
-	limiter.allowAt("new", startedAt.Add(2*time.Minute))
-
-	if _, exists := limiter.limiters["old-a"]; exists {
-		t.Fatal("过期条目 old-a 未被惰性清理")
-	}
-	if _, exists := limiter.limiters["old-b"]; exists {
-		t.Fatal("过期条目 old-b 未被惰性清理")
-	}
-	if len(limiter.limiters) != 1 {
-		t.Fatalf("条目数 = %d, want 1", len(limiter.limiters))
-	}
-}
-
-func TestRateLimiterEvictsOldestAtCapacity(t *testing.T) {
-	limiter := NewRateLimiter(10, 20)
-	limiter.ttl = time.Hour
-	limiter.maxEntries = 2
-
-	startedAt := time.Unix(2_000, 0)
-	limiter.allowAt("oldest", startedAt)
-	limiter.allowAt("second", startedAt.Add(time.Second))
-	limiter.allowAt("third", startedAt.Add(2*time.Second))
-
-	if len(limiter.limiters) != 2 {
-		t.Fatalf("条目数 = %d, want 2", len(limiter.limiters))
-	}
-	if _, exists := limiter.limiters["oldest"]; exists {
-		t.Fatal("达到容量上限后未淘汰最旧条目")
-	}
-}
-
-func serveRateLimitRequest(router http.Handler, remoteAddr, userID, apiKey string) *httptest.ResponseRecorder {
-	req := httptest.NewRequest(http.MethodGet, "/test", nil)
-	req.RemoteAddr = remoteAddr
-	if userID != "" {
-		req.Header.Set("X-User-ID", userID)
-	}
-	if apiKey != "" {
+	// 使用相同的 API Key 发送请求
+	apiKey := "test-key-123"
+	for i := 0; i < 2; i++ {
+		req := httptest.NewRequest("GET", "/test", nil)
 		req.Header.Set("X-API-Key", apiKey)
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+
+		if w.Code != 200 {
+			t.Errorf("Request %d failed: expected 200, got %d", i+1, w.Code)
+		}
 	}
+
+	// 第3个请求应该被限流
+	req := httptest.NewRequest("GET", "/test", nil)
+	req.Header.Set("X-API-Key", apiKey)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
-	return w
+
+	// response.ReturnError 返回 HTTP 200，错误信息在 body 中
+	if w.Code != 200 {
+		t.Errorf("Expected 200, got %d", w.Code)
+	}
+	// 验证响应体包含 429 错误码
+	if !contains(w.Body.String(), "429") || !contains(w.Body.String(), "RESOURCE_EXHAUSTED") {
+		t.Errorf("Expected RESOURCE_EXHAUSTED error in body, got: %s", w.Body.String())
+	}
 }
 
-func assertRateLimited(t *testing.T, response *httptest.ResponseRecorder) {
-	t.Helper()
-	if !strings.Contains(response.Body.String(), "429") || !strings.Contains(response.Body.String(), "RESOURCE_EXHAUSTED") {
-		t.Fatalf("want RESOURCE_EXHAUSTED response, got %s", response.Body.String())
+func TestRateLimiterCleanup(t *testing.T) {
+	// 创建一个限流器
+	rl := NewRateLimiter(10, 20)
+
+	// 生成一些限流器实例
+	rl.getLimiter("test1")
+	rl.getLimiter("test2")
+	rl.getLimiter("test3")
+
+	if len(rl.limiters) != 3 {
+		t.Errorf("Expected 3 limiters, got %d", len(rl.limiters))
+	}
+
+	// 停止限流器
+	rl.Stop()
+
+	// 验证 goroutine 已停止（通过检查是否可以再次调用 Stop 而不会 panic）
+	defer func() {
+		if r := recover(); r != nil {
+			t.Errorf("Panic occurred: %v", r)
+		}
+	}()
+}
+
+func TestCleanupAllLimiters(t *testing.T) {
+	// 清空全局缓存
+	cacheMu.Lock()
+	limiterCache = make(map[string]*RateLimiter)
+	cacheMu.Unlock()
+
+	// 创建几个限流器
+	_ = getLimiterFromCache(10, 20)
+	_ = getLimiterFromCache(20, 40)
+
+	cacheMu.RLock()
+	initialCount := len(limiterCache)
+	cacheMu.RUnlock()
+
+	if initialCount != 2 {
+		t.Errorf("Expected 2 limiters in cache, got %d", initialCount)
+	}
+
+	// 清理所有限流器
+	CleanupAllLimiters()
+
+	cacheMu.RLock()
+	finalCount := len(limiterCache)
+	cacheMu.RUnlock()
+
+	if finalCount != 0 {
+		t.Errorf("Expected 0 limiters after cleanup, got %d", finalCount)
 	}
 }

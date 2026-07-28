@@ -12,7 +12,7 @@ func GetCurrentDirectory() string {
 	if err != nil {
 		dir, _ = filepath.Abs(filepath.Dir(os.Args[0]))
 	}
-	return strings.ReplaceAll(dir, "\\", "/")
+	return strings.Replace(dir, "\\", "/", -1)
 }
 
 // PathExists 判断路径是否存在。

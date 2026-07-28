@@ -5,7 +5,7 @@
 ## 项目特点
 
 - ✅ **标准化项目结构** - 清晰的目录组织，易于维护和扩展
-- ✅ **Viper 配置管理** - 支持 YAML、环境变量覆盖和日志配置热重载
+- ✅ **Viper 配置管理** - 支持 YAML 配置、环境变量覆盖和热重载
 - ✅ **JWT 认证** - 灵活的 Token 签发和验证机制，支持自定义数据结构
 - ✅ **限流中间件** - 支持基于 IP 和 Token 的灵活限流配置
 - ✅ **日志管理** - 开发/生产模式自动切换，支持日志轮转
@@ -13,7 +13,6 @@
 - ✅ **响应规范化** - 统一的 API 响应格式，符合 Google API 设计指南
 - ✅ **跨域支持** - 内置 CORS 中间件
 - ✅ **优雅关闭** - 支持信号监听和优雅退出，自动清理资源
-- ✅ **可测试启动生命周期** - bootstrap 统一管理迁移、监听、PID 与反向清理
 - ✅ **健康检查** - 单一健康检查端点
 - ✅ **DTO 实体隔离** - 所有接口返回实体通过 DTO 与内部模型解耦，防止直接暴露数据库结构
 
@@ -21,7 +20,6 @@
 
 ```
 http-services/
-├── bootstrap/            # 应用组装与生命周期：初始化、迁移、HTTP、PID、清理
 ├── api/                    # API 相关代码
 │   ├── app/               # 业务处理（按版本与分组组织）
 │   │   └── v1/
@@ -78,7 +76,7 @@ http-services/
 ├── config.yaml.example   # 配置文件示例
 ├── go.mod                # Go module 定义
 ├── go.sum                # Go module 校验文件
-├── main.go               # CLI、版本、信号 context 与进程退出边界
+├── main.go               # 程序入口
 ├── Makefile              # 构建脚本
 └── README.md             # 项目文档
 
@@ -89,7 +87,6 @@ http-services/
 模板建议按下面的边界扩展。当前模板的路由样例位于 `api/app/v1/open/health`，私有接口预留在 `api/app/v1/private`。`go-template/http-services` 已内置基础持久化组件，`common/`、`services/` 仍主要作为扩展占位，真实项目可以在这些目录里继续扩展共享语义和后台任务实现。
 
 - `api/`：传输层，负责 Gin 路由、中间件、请求 DTO、响应 DTO 与领域错误到接口响应的映射，不承载核心业务规则。
-- `bootstrap/`：应用组装与生命周期层，负责初始化配置/日志、可选迁移、listener/PID、HTTP 运行和资源反向清理；业务规则不放这里。
 - `domain/`：业务规则层，放状态流转、领域错误、跨模块流程编排等和 HTTP 无关的逻辑。
 - `db/`：持久化适配层，放数据库客户端、模型、查询封装、数据库常量和迁移入口。模板已内置 MySQL/GORM 与 Redis 基础 client，真实项目可继续按 MySQL、Redis 等适配器拆分。
 - `services/`：长驻服务和后台任务层，放 cron、消息队列 consumer/producer、worker 等运行期任务。模板当前预留 `services/cron/` 占位。
@@ -601,7 +598,7 @@ make migrate
 
 ## 配置说明
 
-项目使用 [Viper](https://github.com/spf13/viper) 进行配置管理，支持 YAML 配置文件、环境变量覆盖和日志配置热重载。HTTP、JWT、数据库和 Redis 配置在启动时冻结，修改后需要重启。
+项目使用 [Viper](https://github.com/spf13/viper) 进行配置管理，支持 YAML 配置文件、环境变量覆盖和配置热重载。
 
 ### 配置文件路径
 
@@ -622,11 +619,6 @@ server:
   read_timeout: "30s"             # 读取超时
   write_timeout: "30s"            # 写入超时
   idle_timeout: "120s"            # 空闲连接超时
-  static_dir: "static"             # /static 公开资源目录；空值表示关闭
-  trusted_proxies:                 # 仅填写实际反向代理 IP/CIDR
-    - "127.0.0.1"
-    - "::1"
-  enable_cors: true                # 启用默认 CORS，预检请求返回 204
   enable_rate_limit: false        # 是否启用全局限流
   global_rate_limit: 100          # 全局限流速率（每秒请求数）
   global_rate_burst: 200          # 全局限流突发数
@@ -662,11 +654,7 @@ Redis client 初始化时会捕获该前缀，因此修改后必须重启服务�
 
 服务进程只提供 HTTP，不内置 ACME 自动证书签发或本地证书文件 TLS 热更新。生产环境建议在 Caddy、Nginx、Traefik、Kubernetes Ingress 或云负载均衡层终止 HTTPS，再将流量反向代理到本服务监听端口。
 
-服务默认信任本机反向代理来源 `127.0.0.1` 和 `::1`，因此通过本机 Caddy/Nginx 反代时，Gin 的 `ClientIP()` 会从 `X-Forwarded-For` / `X-Real-IP` 获取真实客户端 IP。如果反向代理不在本机，请通过 `server.trusted_proxies` 配置实际代理 IP 或 CIDR，禁止使用 `0.0.0.0/0` 等全开放网段。非法值会使配置加载失败。
-
-`server.static_dir` 控制 `/static` 公开资源托管，空值表示关闭；工作目录 `.` 和文件系统根目录 `/` 会被拒绝。该目录中的内容会对外公开，不能放配置、密钥或其他内部文件；跨平台发布包会携带模板的 `static/` 目录。
-
-默认 HTTP 日志只记录 method、path、status、响应字节数、耗时、可信客户端 IP 和 trace ID，不记录 query、请求体、Authorization、Cookie 或 panic 内容。入站 `X-Trace-ID` 只接受 32 位小写十六进制值，非法值会被替换，并同步传入标准 `context.Context`。
+服务默认信任本机反向代理来源 `127.0.0.1` 和 `::1`，因此通过本机 Caddy/Nginx 反代时，Gin 的 `ClientIP()` 会从 `X-Forwarded-For` / `X-Real-IP` 获取真实客户端 IP。如果反向代理与服务不在同一主机或同一 loopback 来源，请在 `api/router.go` 中将 `SetTrustedProxies` 调整为实际代理 IP 或网段，避免直接信任所有来源。
 
 ### 环境变量覆盖
 
@@ -684,9 +672,6 @@ export HTTP_SERVICES_SERVER_READ_TIMEOUT="60s"
 
 # 启用全局限流
 export HTTP_SERVICES_SERVER_ENABLE_RATE_LIMIT=true
-export HTTP_SERVICES_SERVER_TRUSTED_PROXIES="10.0.0.0/8,192.0.2.10"
-export HTTP_SERVICES_SERVER_STATIC_DIR="static"
-export HTTP_SERVICES_SERVER_ENABLE_CORS=true
 
 # 覆盖日志配置
 export HTTP_SERVICES_LOG_MAX_SIZE=100
@@ -726,9 +711,9 @@ log:
 
 ### 配置热重载
 
-服务只热更新 `log.max_size`、`log.max_age`、`log.level` 和 `log.gin_level`，并通过并发安全快照重建 logger。
+服务支持配置热重载功能。修改 `config.yaml` 后，服务会自动检测并重新加载配置，无需重启。
 
-端口、超时、请求限制、可信代理、static、CORS、限流、JWT、MySQL 和 Redis 等配置均为启动期配置。修改这些值后必须重启；watcher 不会修改运行中的启动配置，避免 Router 已固化行为与全局变量不一致。
+**注意：** 部分配置（如端口、超时等）需要重启服务才能生效，但大部分配置可以热重载。
 
 ### Docker 环境变量示例
 
@@ -869,7 +854,6 @@ middleware.RateLimitWithOptions(middleware.RateLimitOptions{
 - `Rate`: 每秒请求数（令牌生成速率）
 - `Burst`: 突发请求数（令牌桶容量）
 - 建议 `Burst >= Rate`，通常设置为 `Burst = 2 × Rate`
-- 每个中间件实例最多维护 10000 个 key，过期条目在请求路径惰性清理，不启动后台清理 goroutine
 
 #### 分页处理
 
@@ -889,13 +873,15 @@ if pageQuery.IsDisabled() {
 ### 4. 路由组织（分层）
 
 ```go
-// 生产 bootstrap 传入启动配置快照，并传播 Router 构建错误。
-router, err := api.NewRouter(api.DefaultOptions(config.SnapshotHTTPConfig()))
-if err != nil {
-    return err
+// 顶层：api/router.go（仅初始化与挂载 /api，业务路由下沉到 app 层）
+func InitApi() *gin.Engine {
+    router := gin.New()
+    router.Use(middleware.TraceID(), middleware.AccessLog(), middleware.Recovery())
+    // ... 全局中间件
+    apiGroup := router.Group("/api")
+    app.RegisterRoutes(apiGroup)
+    return router
 }
-
-// InitApi() 仅作为旧调用方的兼容入口；新代码优先使用 NewRouter(Options)。
 
 // app 层：api/app/router.go（在 /api 下挂载各版本）
 func RegisterRoutes(api *gin.RouterGroup) {

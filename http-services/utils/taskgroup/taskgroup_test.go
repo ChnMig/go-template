@@ -16,8 +16,7 @@ func TestRun_ReturnsErrorsInTaskOrder(t *testing.T) {
 	result := make(chan []error, 1)
 
 	go func() {
-		result <- Run(
-			context.Background(),
+		result <- Run(context.Background(),
 			CancelOnError("first", func(context.Context) error {
 				close(firstStarted)
 				<-releaseFirst
@@ -47,8 +46,7 @@ func TestRun_CancelOnErrorCancelsPeerAndWaitsForExit(t *testing.T) {
 	result := make(chan []error, 1)
 
 	go func() {
-		result <- Run(
-			context.Background(),
+		result <- Run(context.Background(),
 			CancelOnError("root", func(context.Context) error {
 				<-peerStarted
 				return rootErr
@@ -85,8 +83,7 @@ func TestRun_ContinueOnErrorKeepsPeerRunning(t *testing.T) {
 	result := make(chan []error, 1)
 
 	go func() {
-		result <- Run(
-			context.Background(),
+		result <- Run(context.Background(),
 			ContinueOnError("soft", func(context.Context) error {
 				close(softReturned)
 				return softErr
@@ -123,8 +120,7 @@ func TestRun_RecoversPanicWithMetadataAndCancelsPeer(t *testing.T) {
 	peerStarted := make(chan struct{})
 	peerCanceled := make(chan struct{})
 
-	errs := Run(
-		context.Background(),
+	errs := Run(context.Background(),
 		CancelOnError("panicking task", func(context.Context) error {
 			<-peerStarted
 			panic(panicValue)
@@ -163,8 +159,7 @@ func TestRun_ContinueOnErrorStillCancelsForContextError(t *testing.T) {
 	peerStarted := make(chan struct{})
 	peerCanceled := make(chan struct{})
 
-	errs := Run(
-		context.Background(),
+	errs := Run(context.Background(),
 		ContinueOnError("deadline", func(context.Context) error {
 			<-peerStarted
 			return context.DeadlineExceeded
@@ -194,8 +189,7 @@ func TestRun_PreservesWorkerCancellationWhenParentIsCanceled(t *testing.T) {
 	result := make(chan []error, 1)
 
 	go func() {
-		result <- Run(
-			ctx,
+		result <- Run(ctx,
 			ContinueOnError("first", func(ctx context.Context) error {
 				close(firstStarted)
 				<-ctx.Done()

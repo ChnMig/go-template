@@ -12,7 +12,6 @@ import (
 	serviceLog "http-services/utils/log"
 
 	"github.com/gin-gonic/gin"
-	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
@@ -36,13 +35,26 @@ func Test_ReturnError_logs_complete_params_and_response(t *testing.T) {
 
 	// Then
 	var entry map[string]any
-	require.NoError(t, json.Unmarshal(output.Bytes(), &entry))
-	require.Equal(t, "error", entry["level"])
-	require.Equal(t, "Returning error response", entry["msg"])
-	require.Equal(t, map[string]any{"token": "jwt-full-value", "external_no": "external-1"}, entry["params"])
+	if err := json.Unmarshal(output.Bytes(), &entry); err != nil {
+		t.Fatalf("decode log entry: %v", err)
+	}
+	if entry["level"] != "error" {
+		t.Fatalf("level = %v, want error", entry["level"])
+	}
+	if entry["msg"] != "Returning error response" {
+		t.Fatalf("msg = %v, want Returning error response", entry["msg"])
+	}
+	params, ok := entry["params"].(map[string]any)
+	if !ok || params["token"] != "jwt-full-value" || params["external_no"] != "external-1" {
+		t.Fatalf("params = %#v, want complete bound params", entry["params"])
+	}
 	loggedResponse, ok := entry["response"].(map[string]any)
-	require.True(t, ok)
-	require.Equal(t, float64(http.StatusInternalServerError), loggedResponse["code"])
-	require.Equal(t, "INTERNAL", loggedResponse["status"])
-	require.Equal(t, "internal server error", loggedResponse["message"])
+	if !ok {
+		t.Fatalf("response = %#v, want object", entry["response"])
+	}
+	if loggedResponse["code"] != float64(http.StatusInternalServerError) ||
+		loggedResponse["status"] != "INTERNAL" ||
+		loggedResponse["message"] != "internal server error" {
+		t.Fatalf("response = %#v, want complete INTERNAL envelope", loggedResponse)
+	}
 }
