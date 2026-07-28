@@ -1,16 +1,66 @@
 package api
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"testing"
 
+	"http-services/api/middleware"
 	"http-services/config"
 
 	"github.com/gin-gonic/gin"
 )
+
+func TestRateLimitedResponseKeepsTraceID(t *testing.T) {
+	previousMaxBodySize := config.MaxBodySize
+	previousRateLimit := config.EnableRateLimit
+	previousRate := config.GlobalRateLimit
+	previousBurst := config.GlobalRateBurst
+	previousProxies := config.TrustedProxies
+	previousStaticDir := config.StaticDir
+	t.Cleanup(func() {
+		middleware.CleanupAllLimiters()
+		config.MaxBodySize = previousMaxBodySize
+		config.EnableRateLimit = previousRateLimit
+		config.GlobalRateLimit = previousRate
+		config.GlobalRateBurst = previousBurst
+		config.TrustedProxies = previousProxies
+		config.StaticDir = previousStaticDir
+	})
+	config.MaxBodySize = 1 << 20
+	config.EnableRateLimit = true
+	config.GlobalRateLimit = 0
+	config.GlobalRateBurst = 1
+	config.TrustedProxies = []string{"127.0.0.1", "::1"}
+	config.StaticDir = ""
+	router := InitApi()
+	router.GET("/probe", func(c *gin.Context) { c.Status(http.StatusNoContent) })
+	request := func() *http.Request {
+		result := httptest.NewRequest(http.MethodGet, "/probe", nil)
+		result.RemoteAddr = "192.0.2.10:4321"
+		return result
+	}
+
+	router.ServeHTTP(httptest.NewRecorder(), request())
+	recorder := httptest.NewRecorder()
+	router.ServeHTTP(recorder, request())
+
+	var envelope struct {
+		Code int `json:"code"`
+	}
+	if err := json.Unmarshal(recorder.Body.Bytes(), &envelope); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if envelope.Code != http.StatusTooManyRequests {
+		t.Fatalf("code = %d, want %d", envelope.Code, http.StatusTooManyRequests)
+	}
+	if recorder.Header().Get(middleware.TraceIDHeaderKey) == "" {
+		t.Fatal("rate-limited response is missing X-Trace-ID")
+	}
+}
 
 func TestRouterUsesConfiguredCORSProxiesAndStaticDirectory(t *testing.T) {
 	previousMaxBodySize := config.MaxBodySize

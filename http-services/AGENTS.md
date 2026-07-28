@@ -24,11 +24,11 @@ http-services/
 
 | Task | Location | Notes |
 |------|----------|-------|
-| 程序入口/启动顺序 | `main.go` | `LoadConfig -> runmodel.Detect -> log.GetLogger/StartMonitor -> WatchConfig -> CheckConfig -> optional MigrateAll -> api.InitApi` |
+| 程序入口/启动顺序 | `main.go` | `LoadConfig -> runmodel.Detect -> log.GetLogger/StartMonitor -> WatchConfig -> optional MigrateAll -> api.InitApi` |
 | 构建/测试/发布 | `Makefile` | 所有本地命令以 Make target 为准 |
 | HTTP 路由/中间件 | `api/` | 见 `api/AGENTS.md` |
 | 配置默认值与热重载 | `config/load.go` | Viper、`HTTP_SERVICES_` env、`parseSize`、`WatchConfig` |
-| 配置安全门禁 | `config/check.go` | JWT key 非空、非示例值、长度至少 32 |
+| 可选 JWT 配置校验 | `config/check.go` | 只有启用 JWT 的项目才在启动边界调用 |
 | 全局配置变量 | `config/config.go` | `ListenPort`、超时、限流、日志、分页默认值 |
 | 日志生命周期 | `utils/log/log.go` | dev/release 分流、Gin 日志独立文件、轮转、热重建 |
 | JWT 签发/解析 | `utils/authentication/jwt.go` | 直接读取 `config.JWTKey/JWTExpiration` |
@@ -60,12 +60,14 @@ http-services/
 ## CONVENTIONS
 
 - 启动顺序不可调换：运行模式必须在初始化 logger 前设置；logger 初始化后再启动配置热重载。
-- 配置文件名固定为 `config.yaml`，查找顺序：程序目录、工作目录、`/etc/http-services/`。
+- 配置文件名固定为 `config.yaml`，查找顺序：工作目录、`/etc/http-services/`。
 - 环境变量前缀固定 `HTTP_SERVICES_`；层级用 `_` 代替点，如 `HTTP_SERVICES_SERVER_PORT`。
 - `server.pid_file` 相对路径基于程序目录转换为绝对路径。
 - `max_body_size` 支持 `B/KB/K/MB/M/GB/G`；非法单位会让配置加载失败。
 - Dev 日志输出到终端；Release 日志输出到 `log/<程序名>.log` 与 `log/<程序名>.gin.log`。
 - `log.gin_level` 为空时跟随 `log.level`；配置热重载后 logger 自动刷新。
+- 使用全局 Zap；TraceID 同时写入 Gin Context 与标准 `context.Context`，下游调用继续传递。
+- 错误日志使用 `log.WithRequest` 记录完整 query、form、path params、已绑定业务参数、响应和具体错误，以排障易用性为优先，不做字段脱敏。
 - `api/` 只处理 HTTP 入参、DTO、响应和错误翻译；核心业务规则放 `domain/`。
 - `domain/` 放可被 handler、worker、cron 复用的业务规则；`services/` 只放长驻任务的调度、消费循环和生命周期管理。
 - `db/` 只表达存储结构、数据库常量、查询 helper、迁移和外部存储适配；跨表业务流程、状态机和领域错误不要下沉到 `db/`。
@@ -115,11 +117,12 @@ make version
 ```
 
 Command internals:
-- `make test` runs `go test -v -coverprofile=coverage.out -covermode=atomic ./...` and prints Chinese summary + total coverage.
-- `make test-race` runs `go test -race -shuffle=on -count=1 ./...`.
+- `make test` and `make test-race` run `go test -race -shuffle=on -count=1 ./...`.
+- `make test-coverage` explicitly generates `coverage.out`; normal verification does not.
+- `make build-check` builds in a temporary directory and leaves no artifact.
 - `make fmt` runs `gofmt -w $(find . -name "*.go" -not -path "./vendor/*")`.
 - `make lint` runs `go vet ./...`.
-- `make verify` runs `fmt -> lint -> test -> test-race`.
+- `make verify` runs `lint -> race test -> build-check -> go mod verify` and does not modify source files.
 - Cross build outputs archives to `dist/`; Windows uses zip when available, others use tar.gz.
 
 ## TESTS

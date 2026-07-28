@@ -1,24 +1,22 @@
+SHELL := /bin/bash
 export GOTOOLCHAIN := go1.25.5
+export GOFLAGS ?= -mod=readonly
 
-.PHONY: build build-local build-cross run dev migrate clean clean-dist help test test-race fmt lint verify
+.PHONY: help build build-local build-cross build-check run dev migrate clean clean-dist version test test-race test-coverage test-integration fmt lint verify
 
-# 版本信息
 VERSION := $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
 BUILD_TIME := $(shell date -u '+%Y-%m-%d_%H:%M:%S')
 GIT_COMMIT := $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
 
-# 构建参数
 LDFLAGS := -X main.Version=$(VERSION) -X main.BuildTime=$(BUILD_TIME) -X main.GitCommit=$(GIT_COMMIT)
-BINARY_NAME := http-services
-# 产物名称（可通过 make build BIN_NAME=xxx 覆盖）
-OUTPUT_NAME := $(if $(BIN_NAME),$(BIN_NAME),$(BINARY_NAME))
+BIN_NAME ?= http-services
+BIN_DIR ?= bin
 
-# 跨平台构建矩阵与产物目录
 PLATFORMS ?= linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64
-DIST_DIR := dist
+DIST_DIR ?= dist
 CGO_ENABLED ?= 0
-# 额外随包文件（存在才会被复制）
 PACKAGE_FILES ?= README.md config.yaml.example
+PACKAGE_DIRS ?= static
 
 help: ## 显示帮助信息
 	@echo "可用命令:"
@@ -26,112 +24,84 @@ help: ## 显示帮助信息
 
 build: ## 构建生产版本（CROSS=1 启用跨平台打包，BIN_NAME=xxx 指定二进制名称）
 	@if [ "$(CROSS)" = "1" ]; then \
-	  $(MAKE) build-cross; \
+		$(MAKE) build-cross; \
 	else \
-	  $(MAKE) build-local; \
+		$(MAKE) build-local; \
 	fi
 
-build-local: ## 本地构建（默认）
-	@echo "构建 $(OUTPUT_NAME)..."
-	@mkdir -p bin
-	@go build -ldflags "$(LDFLAGS)" -o bin/$(OUTPUT_NAME) .
-	@echo "✓ 构建完成: bin/$(OUTPUT_NAME)"
+build-local: ## 本地构建
+	@echo "构建 $(BIN_NAME)..."
+	@mkdir -p "$(BIN_DIR)"
+	@go build -trimpath -ldflags "$(LDFLAGS)" -o "$(BIN_DIR)/$(BIN_NAME)" .
+	@echo "✓ 构建完成: $(BIN_DIR)/$(BIN_NAME)"
 
 build-cross: clean-dist ## 跨平台构建并打包到 dist/
 	@echo "开始跨平台构建与打包: $(PLATFORMS)"
-	@mkdir -p $(DIST_DIR)
+	@mkdir -p "$(DIST_DIR)"
 	@set -e; \
-	for PLATFORM in $(PLATFORMS); do \
-	  OS=$${PLATFORM%/*}; ARCH=$${PLATFORM#*/}; \
-	  EXT=""; [ "$$OS" = "windows" ] && EXT=".exe"; \
-	  OUT_DIR="$(DIST_DIR)/$(OUTPUT_NAME)_$(VERSION)_$${OS}_$${ARCH}"; \
-	  echo "- 构建 $$OS/$$ARCH"; \
-	  mkdir -p "$$OUT_DIR"; \
-	  GOOS=$$OS GOARCH=$$ARCH CGO_ENABLED=$(CGO_ENABLED) \
-	    go build -trimpath -ldflags "$(LDFLAGS) -s -w" -o "$$OUT_DIR/$(OUTPUT_NAME)$$EXT" .; \
-	  for f in $(PACKAGE_FILES); do \
-	    [ -f "$$f" ] && cp "$$f" "$$OUT_DIR/" || true; \
-	  done; \
-	  if command -v zip >/dev/null 2>&1 && [ "$$OS" = "windows" ]; then \
-	    (cd "$(DIST_DIR)" && zip -q -r "$(OUTPUT_NAME)_$(VERSION)_$${OS}_$${ARCH}.zip" "$$(basename "$$OUT_DIR")"); \
-	  else \
-	    (cd "$(DIST_DIR)" && tar -czf "$(OUTPUT_NAME)_$(VERSION)_$${OS}_$${ARCH}.tar.gz" "$$(basename "$$OUT_DIR")"); \
-	  fi; \
-	  rm -rf "$$OUT_DIR"; \
-	done; \
-	echo "✓ 打包完成，产物位于 $(DIST_DIR)/"
+	for platform in $(PLATFORMS); do \
+		os="$${platform%/*}"; arch="$${platform#*/}"; extension=""; \
+		[ "$$os" = "windows" ] && extension=".exe"; \
+		output_dir="$(DIST_DIR)/$(BIN_NAME)_$(VERSION)_$${os}_$${arch}"; \
+		echo "- 构建 $$os/$$arch"; \
+		mkdir -p "$$output_dir"; \
+		GOOS="$$os" GOARCH="$$arch" CGO_ENABLED=$(CGO_ENABLED) \
+			go build -trimpath -ldflags "$(LDFLAGS) -s -w" -o "$$output_dir/$(BIN_NAME)$$extension" .; \
+		for file in $(PACKAGE_FILES); do [ -f "$$file" ] && cp "$$file" "$$output_dir/" || true; done; \
+		for directory in $(PACKAGE_DIRS); do [ -d "$$directory" ] && cp -R "$$directory" "$$output_dir/" || true; done; \
+		if command -v zip >/dev/null 2>&1 && [ "$$os" = "windows" ]; then \
+			(cd "$(DIST_DIR)" && zip -q -r "$(BIN_NAME)_$(VERSION)_$${os}_$${arch}.zip" "$$(basename "$$output_dir")"); \
+		else \
+			(cd "$(DIST_DIR)" && tar -czf "$(BIN_NAME)_$(VERSION)_$${os}_$${arch}.tar.gz" "$$(basename "$$output_dir")"); \
+		fi; \
+		rm -rf "$$output_dir"; \
+	done
+	@echo "✓ 打包完成，产物位于 $(DIST_DIR)/"
 
-run: build-local ## 构建并运行（生产模式）
-	@echo "启动服务（生产模式）..."
-	@./bin/$(OUTPUT_NAME)
+build-check: ## 在临时目录验证构建，不保留产物
+	@temp_dir="$$(mktemp -d "$${TMPDIR:-/tmp}/$(BIN_NAME)-build.XXXXXX")"; \
+	trap 'rm -rf "$$temp_dir"' EXIT INT TERM; \
+	go build -trimpath -ldflags "$(LDFLAGS)" -o "$$temp_dir/$(BIN_NAME)" .
 
-dev: build-local ## 构建并运行（开发模式）
-	@echo "启动服务（开发模式）..."
-	@./bin/$(OUTPUT_NAME) --dev
+run: build-local ## 构建并以生产模式运行
+	@"$(BIN_DIR)/$(BIN_NAME)"
+
+dev: build-local ## 构建并以开发模式运行
+	@"$(BIN_DIR)/$(BIN_NAME)" --dev
 
 migrate: build-local ## 构建并执行数据库迁移
-	@echo "执行数据库迁移..."
-	@./bin/$(OUTPUT_NAME) --migrate
+	@"$(BIN_DIR)/$(BIN_NAME)" --migrate
 
-clean: ## 清理构建文件
-	@echo "清理构建文件..."
-	@rm -rf bin/
-	@rm -f $(OUTPUT_NAME)
-	@echo "✓ 清理完成"
+clean: ## 清理本地构建文件
+	@rm -rf "$(BIN_DIR)"
 
-clean-dist: ## 清理打包产物（dist/）
-	@rm -rf $(DIST_DIR)
-	@echo "✓ 已清理 $(DIST_DIR)/"
+clean-dist: ## 清理跨平台打包产物
+	@rm -rf "$(DIST_DIR)"
 
 version: ## 显示版本信息
 	@echo "Version:    $(VERSION)"
 	@echo "Build Time: $(BUILD_TIME)"
 	@echo "Git Commit: $(GIT_COMMIT)"
 
-test: ## 运行测试并显示覆盖率（含中文提示与结果解析）
-	@echo "运行测试（带覆盖率）..."
-	@OUT=$$(mktemp -t go-test-XXXXXX); \
-	trap 'rm -f "$$OUT"' EXIT; \
-	if go test -v -coverprofile=coverage.out -covermode=atomic ./... >"$$OUT" 2>&1; then \
-	  STATUS=0; \
-	else \
-	  STATUS=$$?; \
-	fi; \
-	cat "$$OUT"; \
-	PASS_PKGS=$$(grep -c '^ok[[:space:]]' "$$OUT" || true); \
-	FAIL_PKGS=$$(grep -c '^FAIL[[:space:]]' "$$OUT" || true); \
-	TOTAL_PKGS=$$((PASS_PKGS+FAIL_PKGS)); \
-	PASS_TESTS=$$(grep -c '^--- PASS:' "$$OUT" || true); \
-	FAIL_TESTS=$$(grep -c '^--- FAIL:' "$$OUT" || true); \
-	SKIP_TESTS=$$(grep -c '^--- SKIP:' "$$OUT" || true); \
-	if [ -f coverage.out ]; then \
-	  TOTAL_COV=$$(go tool cover -func=coverage.out | awk '/^total:/ {print $$3}'); \
-	else \
-	  TOTAL_COV="N/A"; \
-	fi; \
-	echo "测试汇总：包 总数=$$TOTAL_PKGS 通过=$$PASS_PKGS 失败=$$FAIL_PKGS"; \
-	echo "用例汇总：通过=$$PASS_TESTS 失败=$$FAIL_TESTS 跳过=$$SKIP_TESTS"; \
-	echo "总覆盖率：$$TOTAL_COV"; \
-	exit $$STATUS
-
-test-race: ## 使用 race detector 与随机顺序运行测试
-	@echo "运行 race + shuffle 测试..."
+test: ## 使用 race detector 与随机顺序运行全量测试
 	@go test -race -shuffle=on -count=1 ./...
 
-fmt: ## 格式化代码
-	@echo "格式化代码..."
-	@gofmt -w $$(find . -name "*.go" -not -path "./vendor/*")
-	@echo "✓ 格式化完成"
+test-race: test ## test 的兼容别名
 
-lint: ## 运行代码检查（go vet）
-	@echo "运行 go vet..."
+test-coverage: ## 生成覆盖率报告
+	@go test -coverprofile=coverage.out -covermode=atomic ./...
+	@go tool cover -func=coverage.out
+
+test-integration: ## 运行可选外部依赖集成测试
+	@go test -tags=integration -race -shuffle=on -count=1 ./db/msqldb ./db/rdb
+
+fmt: ## 格式化 Go 代码
+	@gofmt -w $$(find . -name '*.go' -not -path './vendor/*')
+
+lint: ## 运行 go vet
 	@go vet ./...
-	@echo "✓ 检查完成"
 
-verify: ## 验证：fmt -> lint -> test -> test-race
-	@$(MAKE) fmt
-	@$(MAKE) lint
-	@$(MAKE) test
-	@$(MAKE) test-race
+verify: lint test build-check ## 验证代码、测试和构建且不保留构建产物
+	@go mod verify
 
 .DEFAULT_GOAL := help

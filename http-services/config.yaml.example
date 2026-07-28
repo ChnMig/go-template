@@ -10,9 +10,8 @@
 #   export HTTP_SERVICES_DATABASE_MYSQL_DSN="user:pass@tcp(127.0.0.1:3306)/app?charset=utf8mb4&parseTime=True&loc=Local"
 #
 # 配置文件查找顺序：
-# 1. 当前目录 (./config.yaml)
-# 2. 工作目录 (./config.yaml)
-# 3. 系统目录 (/etc/http-services/config.yaml)
+# 1. 工作目录 (./config.yaml)
+# 2. 系统目录 (/etc/http-services/config.yaml)
 
 server:
   # HTTP 监听地址
@@ -45,7 +44,7 @@ server:
   enable_cors: true               # OPTIONS 预检直接返回 204
 
 jwt:
-  key: "YOUR_SECRET_KEY_HERE"  # 务必修改此密钥，否则存在安全风险（至少32字符）
+  key: ""  # 仅在项目启用 JWT 时配置；启用后至少 32 字符
   expiration: "12h"  # JWT token 过期时间，格式: 12h, 24h, 30m 等
 
 database:

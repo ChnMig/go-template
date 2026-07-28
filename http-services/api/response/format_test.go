@@ -2,10 +2,12 @@ package response
 
 import (
 	"encoding/json"
+	"net/http"
 	"net/http/httptest"
 	"testing"
 
 	"http-services/utils/contextkey"
+	serviceLog "http-services/utils/log"
 
 	"github.com/gin-gonic/gin"
 )
@@ -178,7 +180,8 @@ func TestTraceIDInResponse(t *testing.T) {
 	c, _ := gin.CreateTestContext(w)
 
 	expectedTraceID := "test-trace-id-12345"
-	c.Set(contextkey.TraceID, expectedTraceID)
+	request := httptest.NewRequest(http.MethodGet, "/probe", nil)
+	c.Request = request.WithContext(serviceLog.WithTraceID(request.Context(), expectedTraceID))
 
 	testData := map[string]string{"message": "test"}
 	ReturnOk(c, testData)

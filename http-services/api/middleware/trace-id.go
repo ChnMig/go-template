@@ -6,20 +6,24 @@ import (
 	"http-services/api/response"
 	"http-services/utils/contextkey"
 	"http-services/utils/id"
+	serviceLog "http-services/utils/log"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"go.uber.org/zap"
 )
 
+// TraceIDHeader is the request and response correlation header.
+const TraceIDHeader = serviceLog.TraceIDHeader
+
 const (
-	TraceIDHeaderKey  = contextkey.TraceIDHeader
+	TraceIDHeaderKey  = TraceIDHeader
 	TraceIDContextKey = contextkey.TraceID
 )
 
 func TraceID() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		traceID := c.GetHeader(TraceIDHeaderKey)
+		traceID := c.GetHeader(TraceIDHeader)
 		parsedTraceID, parseErr := uuid.Parse(traceID)
 		validTraceID := parseErr == nil && len(traceID) == 36 && strings.EqualFold(parsedTraceID.String(), traceID)
 		if !validTraceID {
@@ -33,7 +37,8 @@ func TraceID() gin.HandlerFunc {
 		}
 
 		c.Set(TraceIDContextKey, traceID)
-		c.Header(TraceIDHeaderKey, traceID)
+		c.Request = c.Request.WithContext(serviceLog.WithTraceID(c.Request.Context(), traceID))
+		c.Header(TraceIDHeader, traceID)
 
 		contextLogger := zap.L().With(
 			zap.String("trace_id", traceID),
@@ -43,12 +48,8 @@ func TraceID() gin.HandlerFunc {
 		)
 		c.Set(contextkey.Logger, contextLogger)
 
-		contextLogger.Debug("Request started")
-
+		contextLogger.Debug("http.request.started")
 		c.Next()
-
-		contextLogger.Debug("Request completed",
-			zap.Int("status_code", c.Writer.Status()),
-		)
+		contextLogger.Debug("http.request.completed", zap.Int("status", c.Writer.Status()))
 	}
 }

@@ -3,8 +3,8 @@ module http-services
 go 1.25.5
 
 require (
-	github.com/alecthomas/kong v1.15.0
-	github.com/fsnotify/fsnotify v1.9.0
+	github.com/alecthomas/kong v1.16.0
+	github.com/fsnotify/fsnotify v1.10.1
 	github.com/gin-gonic/gin v1.12.0
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/google/uuid v1.6.0

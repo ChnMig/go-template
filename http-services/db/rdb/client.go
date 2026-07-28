@@ -49,6 +49,7 @@ func Init() error {
 	addRedisKeyPrefixHook(redisClient, config.RedisKeyPrefix)
 
 	if err := redisClient.Ping(context.Background()).Err(); err != nil {
+		_ = redisClient.Close()
 		zap.L().Error("redis connection failed", zap.Error(err))
 		return err
 	}

@@ -11,19 +11,10 @@ import (
 	"go.uber.org/zap"
 )
 
-func getTraceID(c *gin.Context) string {
-	if traceID, exists := c.Get(contextkey.TraceID); exists {
-		if id, ok := traceID.(string); ok {
-			return id
-		}
-	}
-	return ""
-}
-
 func ReturnErrorWithData(c *gin.Context, data responseData, result interface{}) {
 	l := log.WithRequest(c)
 	data.Timestamp = time.Now().Unix()
-	data.TraceID = getTraceID(c)
+	data.TraceID = requestTraceID(c)
 	data.Detail = result
 	c.JSON(http.StatusOK, data)
 	logErrorResponse(l, "Returning error response with data", data)
@@ -36,7 +27,7 @@ func ReturnOk(c *gin.Context, result interface{}) {
 	l := log.WithRequest(c)
 	data := OK
 	data.Timestamp = time.Now().Unix()
-	data.TraceID = getTraceID(c)
+	data.TraceID = requestTraceID(c)
 	data.Detail = result
 	c.JSON(http.StatusOK, data)
 	l.Debug("Returning OK response", zap.Any("response", data))
@@ -49,7 +40,7 @@ func ReturnOkWithTotal(c *gin.Context, total int, result interface{}) {
 	l := log.WithRequest(c)
 	data := OK
 	data.Timestamp = time.Now().Unix()
-	data.TraceID = getTraceID(c)
+	data.TraceID = requestTraceID(c)
 	data.Detail = result
 	data.Total = &total
 	c.JSON(http.StatusOK, data)
@@ -62,7 +53,7 @@ func ReturnOkWithTotal(c *gin.Context, total int, result interface{}) {
 func ReturnError(c *gin.Context, data responseData, message string) {
 	l := log.WithRequest(c)
 	data.Timestamp = time.Now().Unix()
-	data.TraceID = getTraceID(c)
+	data.TraceID = requestTraceID(c)
 	if message != "" {
 		data.Message = message
 	}
@@ -92,9 +83,25 @@ func ReturnSuccess(c *gin.Context) {
 	l := log.WithRequest(c)
 	data := OK
 	data.Timestamp = time.Now().Unix()
-	data.TraceID = getTraceID(c)
+	data.TraceID = requestTraceID(c)
 	c.JSON(http.StatusOK, data)
 	l.Debug("Returning success response", zap.Any("response", data))
 	// Return directly
 	c.Abort()
+}
+
+func requestTraceID(c *gin.Context) string {
+	if c == nil {
+		return ""
+	}
+	if c.Request != nil {
+		if traceID, ok := log.TraceID(c.Request.Context()); ok {
+			return traceID
+		}
+	}
+	if traceID, exists := c.Get(contextkey.TraceID); exists {
+		value, _ := traceID.(string)
+		return value
+	}
+	return ""
 }

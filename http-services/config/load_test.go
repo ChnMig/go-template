@@ -42,7 +42,9 @@ func TestParseSize(t *testing.T) {
 
 func TestSetDefaults(t *testing.T) {
 	// 创建新的 viper 实例用于测试
-	LoadConfig() // 初始化 v
+	if err := LoadConfig(); err != nil {
+		t.Fatalf("LoadConfig() error = %v", err)
+	}
 
 	tests := []struct {
 		name string
@@ -120,27 +122,16 @@ func TestApplyConfig(t *testing.T) {
 
 func TestLoadConfigWithEnv(t *testing.T) {
 	// 设置环境变量
-	os.Setenv("HTTP_SERVICES_SERVER_PORT", "9090")
-	os.Setenv("HTTP_SERVICES_SERVER_HOST", "127.0.0.2")
-	os.Setenv("HTTP_SERVICES_SERVER_STATIC_DIR", "public")
-	os.Setenv("HTTP_SERVICES_SERVER_TRUSTED_PROXIES", "127.0.0.2,::1")
-	os.Setenv("HTTP_SERVICES_SERVER_ENABLE_CORS", "false")
-	os.Setenv("HTTP_SERVICES_JWT_EXPIRATION", "24h")
-	os.Setenv("HTTP_SERVICES_DATABASE_MYSQL_DSN", "user:pass@tcp(127.0.0.1:3306)/app?charset=utf8mb4&parseTime=True&loc=Local")
-	os.Setenv("HTTP_SERVICES_REDIS_HOST", "127.0.0.1:6380")
+	t.Setenv("HTTP_SERVICES_SERVER_PORT", "9090")
+	t.Setenv("HTTP_SERVICES_SERVER_HOST", "127.0.0.2")
+	t.Setenv("HTTP_SERVICES_SERVER_STATIC_DIR", "public")
+	t.Setenv("HTTP_SERVICES_SERVER_TRUSTED_PROXIES", "127.0.0.2,::1")
+	t.Setenv("HTTP_SERVICES_SERVER_ENABLE_CORS", "false")
+	t.Setenv("HTTP_SERVICES_JWT_EXPIRATION", "24h")
+	t.Setenv("HTTP_SERVICES_DATABASE_MYSQL_DSN", "user:pass@tcp(127.0.0.1:3306)/app?charset=utf8mb4&parseTime=True&loc=Local")
+	t.Setenv("HTTP_SERVICES_REDIS_HOST", "127.0.0.1:6380")
 	pidPath := filepath.Join(t.TempDir(), "http-services.pid")
-	os.Setenv("HTTP_SERVICES_SERVER_PID_FILE", pidPath)
-	defer func() {
-		os.Unsetenv("HTTP_SERVICES_SERVER_PORT")
-		os.Unsetenv("HTTP_SERVICES_SERVER_HOST")
-		os.Unsetenv("HTTP_SERVICES_SERVER_STATIC_DIR")
-		os.Unsetenv("HTTP_SERVICES_SERVER_TRUSTED_PROXIES")
-		os.Unsetenv("HTTP_SERVICES_SERVER_ENABLE_CORS")
-		os.Unsetenv("HTTP_SERVICES_JWT_EXPIRATION")
-		os.Unsetenv("HTTP_SERVICES_DATABASE_MYSQL_DSN")
-		os.Unsetenv("HTTP_SERVICES_REDIS_HOST")
-		os.Unsetenv("HTTP_SERVICES_SERVER_PID_FILE")
-	}()
+	t.Setenv("HTTP_SERVICES_SERVER_PID_FILE", pidPath)
 
 	// 重新加载配置
 	err := LoadConfig()
@@ -194,17 +185,15 @@ func TestLoadConfig_RedisKeyPrefix(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			originalAbsPath := AbsPath
 			originalPrefix := RedisKeyPrefix
 			originalViper := v
 			t.Cleanup(func() {
-				AbsPath = originalAbsPath
 				RedisKeyPrefix = originalPrefix
 				v = originalViper
 			})
 
 			configDir := t.TempDir()
-			AbsPath = configDir
+			t.Chdir(configDir)
 			if tt.setEnv {
 				t.Setenv("HTTP_SERVICES_REDIS_KEY_PREFIX", tt.envValue)
 			} else {
@@ -227,12 +216,27 @@ func TestLoadConfig_RedisKeyPrefix(t *testing.T) {
 }
 
 func TestGetViper(t *testing.T) {
-	LoadConfig()
+	if err := LoadConfig(); err != nil {
+		t.Fatalf("LoadConfig() error = %v", err)
+	}
 	viper := GetViper()
 	if viper == nil {
 		t.Error("GetViper() returned nil")
 	}
 	if viper != v {
 		t.Error("GetViper() did not return the expected viper instance")
+	}
+}
+
+func TestWatchConfigWithoutLoadedFileIsNoop(t *testing.T) {
+	originalViper := v
+	v = nil
+	t.Cleanup(func() { v = originalViper })
+	called := false
+
+	WatchConfig(func() { called = true })
+
+	if called {
+		t.Fatal("WatchConfig callback called without a loaded config file")
 	}
 }

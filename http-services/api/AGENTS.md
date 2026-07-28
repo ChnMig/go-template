@@ -42,7 +42,7 @@ Gin Logger/Recovery -> TraceID -> optional IPRateLimit -> SecurityHeaders -> Bod
 ```
 
 - `gin.Default` provides the framework access logger and panic recovery.
-- `TraceID` must run before business handlers so downstream logs/responses can include trace_id.
+- `TraceID` runs before rate limiting and business handlers, writes the ID to Gin and standard contexts, and uses `http.request.started/completed` with the `status` field.
 - Global rate limit is config-driven: `config.EnableRateLimit`, `GlobalRateLimit`, `GlobalRateBurst`.
 - `BodySizeLimit` is config-driven via parsed `config.MaxBodySize`.
 - Shutdown must call `middleware.CleanupAllLimiters()` from `main.go`.
@@ -53,6 +53,7 @@ Gin Logger/Recovery -> TraceID -> optional IPRateLimit -> SecurityHeaders -> Bod
 - All response helpers inject `timestamp` and `trace_id` from context.
 - Use `response.ReturnOk`, `ReturnOkWithTotal`, `ReturnSuccess`, `ReturnError`, or `ReturnErrorWithData`.
 - Error responses should log internal context but return user-friendly messages.
+- Error paths use `log.WithRequest` so complete parsed request parameters and the response envelope remain available for troubleshooting; do not add redaction in the shared scaffold.
 
 ## ANTI-PATTERNS
 

@@ -5,6 +5,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	serviceLog "http-services/utils/log"
+
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 )
@@ -29,7 +31,11 @@ func TestTraceIDMiddleware_KeepCanonicalUUIDWhenProvided(t *testing.T) {
 	const expectedTraceID = "018f47a5-7b8c-7c11-8000-123456789abc"
 	router := gin.New()
 	router.Use(TraceID())
-	router.GET("/", func(c *gin.Context) { c.Status(http.StatusNoContent) })
+	var contextTraceID string
+	router.GET("/", func(c *gin.Context) {
+		contextTraceID, _ = serviceLog.TraceID(c.Request.Context())
+		c.Status(http.StatusNoContent)
+	})
 	request := httptest.NewRequest(http.MethodGet, "/", nil)
 	request.Header.Set(TraceIDHeaderKey, expectedTraceID)
 	recorder := httptest.NewRecorder()
@@ -38,6 +44,9 @@ func TestTraceIDMiddleware_KeepCanonicalUUIDWhenProvided(t *testing.T) {
 
 	if traceID := recorder.Header().Get(TraceIDHeaderKey); traceID != expectedTraceID {
 		t.Fatalf("X-Trace-ID = %q, want %q", traceID, expectedTraceID)
+	}
+	if contextTraceID != expectedTraceID {
+		t.Fatalf("context trace ID = %q, want %q", contextTraceID, expectedTraceID)
 	}
 }
 

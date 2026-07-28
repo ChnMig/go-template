@@ -37,7 +37,6 @@ func TestPidFileLifecycle(t *testing.T) {
 		os.Environ(),
 		"HTTP_SERVICES_SERVER_PORT="+port,
 		"HTTP_SERVICES_SERVER_SHUTDOWN_TIMEOUT=1s",
-		"HTTP_SERVICES_JWT_KEY=0123456789abcdef0123456789abcdef",
 	)
 
 	var out bytes.Buffer

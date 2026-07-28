@@ -18,11 +18,9 @@ var (
 func LoadConfig() error {
 	v = viper.New()
 
-	// 设置配置文件名和路径
 	v.SetConfigName("config")
 	v.SetConfigType("yaml")
-	v.AddConfigPath(AbsPath)               // 当前目录
-	v.AddConfigPath(".")                   // 工作目录
+	v.AddConfigPath(currentDirectory())    // 工作目录
 	v.AddConfigPath("/etc/http-services/") // 系统目录
 
 	// 支持环境变量（自动转换：HTTP_SERVICES_SERVER_PORT）
@@ -37,7 +35,7 @@ func LoadConfig() error {
 	if err := v.ReadInConfig(); err != nil {
 		if _, ok := err.(viper.ConfigFileNotFoundError); ok {
 			// 配置文件不存在，使用默认值
-			zap.L().Warn("Config file not found, using defaults", zap.String("path", AbsPath))
+			zap.L().Warn("Config file not found, using defaults", zap.String("path", currentDirectory()))
 		} else {
 			// 配置文件存在但读取失败
 			return fmt.Errorf("failed to read config file: %w", err)
@@ -115,7 +113,7 @@ func applyConfig() error {
 	GlobalRateBurst = v.GetInt("server.global_rate_burst")
 
 	// pid 文件（相对路径基于程序所在目录）
-	PidFile = v.GetString("server.pid_file")
+	PidFile = strings.TrimSpace(v.GetString("server.pid_file"))
 	if PidFile != "" && !filepath.IsAbs(PidFile) {
 		PidFile = filepath.Join(AbsPath, PidFile)
 	}
@@ -137,7 +135,7 @@ func applyConfig() error {
 	MysqlDSN = v.GetString("database.mysql_dsn")
 
 	// Redis 配置
-	RedisHost = v.GetString("redis.host")
+	RedisHost = strings.TrimSpace(v.GetString("redis.host"))
 	RedisPassword = v.GetString("redis.password")
 	RedisKeyPrefix = strings.TrimSpace(v.GetString("redis.key_prefix"))
 
@@ -157,6 +155,9 @@ func getStringSlice(key string) []string {
 
 // WatchConfig 监听配置文件变化并自动重新加载（热重载）
 func WatchConfig(onChange func()) {
+	if v == nil || v.ConfigFileUsed() == "" {
+		return
+	}
 	v.WatchConfig()
 	v.OnConfigChange(func(e fsnotify.Event) {
 		zap.L().Info("Config file changed, reloading...",

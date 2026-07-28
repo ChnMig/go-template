@@ -6,8 +6,7 @@ import (
 	"http-services/config"
 )
 
-// Detect 根据命令行参数和环境变量确定运行模式。
-// 命令行 --dev 优先级最高；未显式指定时默认 release。
+// Detect 根据 --dev 和 model 环境变量确定日志运行模式。
 func Detect(cliDev bool) string {
 	if cliDev {
 		config.RunModel = config.RunModelDevValue
@@ -17,17 +16,10 @@ func Detect(cliDev bool) string {
 	switch os.Getenv(config.RunModelKey) {
 	case config.RunModelDevValue:
 		config.RunModel = config.RunModelDevValue
-	case config.RunModelRelease:
-		config.RunModel = config.RunModelRelease
 	default:
 		config.RunModel = config.RunModelRelease
 	}
 	return config.RunModel
-}
-
-// Detection 保留旧函数名的兼容入口，默认只根据环境变量判断。
-func Detection() {
-	Detect(false)
 }
 
 func IsDev() bool {

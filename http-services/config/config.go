@@ -5,8 +5,6 @@ import (
 	"os"
 	"path/filepath"
 	"time"
-
-	"http-services/utils/pathtool"
 )
 
 // Here are some basic configurations
@@ -21,12 +19,11 @@ var (
 	RunModelDevValue = "dev"
 	RunModelRelease  = "release"
 	// path
-	SelfName = filepath.Base(os.Args[0])      // own file name
-	AbsPath  = pathtool.GetCurrentDirectory() // current directory
+	SelfName = filepath.Base(os.Args[0]) // own file name
+	AbsPath  = currentDirectory()        // current working directory
 	// log
-	LogDir      = filepath.Join(pathtool.GetCurrentDirectory(), "log")   // log directory
-	LogPath     = filepath.Join(LogDir, fmt.Sprintf("%s.log", SelfName)) // self log path
-	LogModelDev = "dev"                                                  // dev model
+	LogDir  = filepath.Join(AbsPath, "log")                          // log directory
+	LogPath = filepath.Join(LogDir, fmt.Sprintf("%s.log", SelfName)) // self log path
 )
 
 // 从配置文件加载的配置变量
@@ -72,3 +69,11 @@ var (
 	CancelPageSize  = -1 // 取消分页大小
 	CancelPage      = -1 // 取消页码
 )
+
+func currentDirectory() string {
+	directory, err := os.Getwd()
+	if err != nil {
+		return "."
+	}
+	return directory
+}
