@@ -1,12 +1,15 @@
 package api
 
 import (
+	"strings"
+
 	"http-services/api/app"
 	"http-services/api/middleware"
 	"http-services/config"
 	httplog "http-services/utils/log"
 
 	"github.com/gin-gonic/gin"
+	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
 
@@ -24,7 +27,9 @@ func InitApi() *gin.Engine {
 	gin.SetMode(gin.ReleaseMode)
 	router := gin.Default()
 	// Trust local reverse proxies such as Caddy/Nginx so ClientIP can use forwarded headers.
-	router.SetTrustedProxies([]string{"127.0.0.1", "::1"})
+	if err := router.SetTrustedProxies(config.TrustedProxies); err != nil {
+		zap.L().Error("set trusted proxies failed", zap.Error(err))
+	}
 
 	// gin.Default 已安装框架自带的 Logger 和 Recovery。
 	router.Use(middleware.TraceID())
@@ -43,14 +48,18 @@ func InitApi() *gin.Engine {
 	router.Use(middleware.BodySizeLimit(config.MaxBodySize))
 
 	// 6. 跨域处理 - 在业务逻辑前处理
-	router.Use(middleware.CorsDomainHandler())
+	if config.EnableCORS {
+		router.Use(middleware.CorsDomainHandler())
+	}
 
 	// 健康检查端点已移动到 openRouter（/api/v1/open/health）
 
 	// 移除 Prometheus metrics 端点（不需要 metrics）
 
 	// static
-	router.Static("/static", "./static")
+	if staticDir := strings.TrimSpace(config.StaticDir); staticDir != "" {
+		router.Static("/static", staticDir)
+	}
 
 	// /api 分组，业务路由由 app 层递归注册
 	apiGroup := router.Group("/api")

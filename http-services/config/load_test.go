@@ -50,11 +50,14 @@ func TestSetDefaults(t *testing.T) {
 		want any
 	}{
 		{"server port", "server.port", 8080},
+		{"server host", "server.host", "0.0.0.0"},
 		{"max body size", "server.max_body_size", "10MB"},
 		{"pid file", "server.pid_file", "http-services.pid"},
 		{"jwt expiration", "jwt.expiration", "12h"},
 		{"log max size", "log.max_size", 50},
 		{"enable rate limit", "server.enable_rate_limit", false},
+		{"static directory", "server.static_dir", "./static"},
+		{"enable cors", "server.enable_cors", true},
 		{"database mysql dsn", "database.mysql_dsn", ""},
 		{"redis host", "redis.host", "127.0.0.1:6379"},
 		{"redis password", "redis.password", ""},
@@ -81,6 +84,12 @@ func TestApplyConfig(t *testing.T) {
 	// 检查全局变量是否正确设置
 	if ListenPort != 8080 {
 		t.Errorf("ListenPort = %d, want 8080", ListenPort)
+	}
+	if ListenHost != "0.0.0.0" || StaticDir != "./static" || !EnableCORS {
+		t.Errorf("server exceptions = host %q static %q cors %v", ListenHost, StaticDir, EnableCORS)
+	}
+	if len(TrustedProxies) != 2 || TrustedProxies[0] != "127.0.0.1" || TrustedProxies[1] != "::1" {
+		t.Errorf("TrustedProxies = %#v", TrustedProxies)
 	}
 
 	if MaxBodySize != 10*1024*1024 {
@@ -112,6 +121,10 @@ func TestApplyConfig(t *testing.T) {
 func TestLoadConfigWithEnv(t *testing.T) {
 	// 设置环境变量
 	os.Setenv("HTTP_SERVICES_SERVER_PORT", "9090")
+	os.Setenv("HTTP_SERVICES_SERVER_HOST", "127.0.0.2")
+	os.Setenv("HTTP_SERVICES_SERVER_STATIC_DIR", "public")
+	os.Setenv("HTTP_SERVICES_SERVER_TRUSTED_PROXIES", "127.0.0.2,::1")
+	os.Setenv("HTTP_SERVICES_SERVER_ENABLE_CORS", "false")
 	os.Setenv("HTTP_SERVICES_JWT_EXPIRATION", "24h")
 	os.Setenv("HTTP_SERVICES_DATABASE_MYSQL_DSN", "user:pass@tcp(127.0.0.1:3306)/app?charset=utf8mb4&parseTime=True&loc=Local")
 	os.Setenv("HTTP_SERVICES_REDIS_HOST", "127.0.0.1:6380")
@@ -119,6 +132,10 @@ func TestLoadConfigWithEnv(t *testing.T) {
 	os.Setenv("HTTP_SERVICES_SERVER_PID_FILE", pidPath)
 	defer func() {
 		os.Unsetenv("HTTP_SERVICES_SERVER_PORT")
+		os.Unsetenv("HTTP_SERVICES_SERVER_HOST")
+		os.Unsetenv("HTTP_SERVICES_SERVER_STATIC_DIR")
+		os.Unsetenv("HTTP_SERVICES_SERVER_TRUSTED_PROXIES")
+		os.Unsetenv("HTTP_SERVICES_SERVER_ENABLE_CORS")
 		os.Unsetenv("HTTP_SERVICES_JWT_EXPIRATION")
 		os.Unsetenv("HTTP_SERVICES_DATABASE_MYSQL_DSN")
 		os.Unsetenv("HTTP_SERVICES_REDIS_HOST")
@@ -134,6 +151,12 @@ func TestLoadConfigWithEnv(t *testing.T) {
 	// 验证环境变量覆盖
 	if ListenPort != 9090 {
 		t.Errorf("ListenPort = %d, want 9090 (from env)", ListenPort)
+	}
+	if ListenHost != "127.0.0.2" || StaticDir != "public" || EnableCORS {
+		t.Errorf("server env exceptions = host %q static %q cors %v", ListenHost, StaticDir, EnableCORS)
+	}
+	if len(TrustedProxies) != 2 || TrustedProxies[0] != "127.0.0.2" || TrustedProxies[1] != "::1" {
+		t.Errorf("TrustedProxies = %#v", TrustedProxies)
 	}
 
 	if JWTExpiration != 24*time.Hour {

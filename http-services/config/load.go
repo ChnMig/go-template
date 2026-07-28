@@ -53,6 +53,7 @@ func LoadConfig() error {
 // setDefaults 设置默认配置值
 func setDefaults() {
 	// Server 默认配置
+	v.SetDefault("server.host", "0.0.0.0")
 	v.SetDefault("server.port", 8080)
 	v.SetDefault("server.max_body_size", "10MB")
 	v.SetDefault("server.max_header_bytes", 1<<20) // 1MB
@@ -64,6 +65,9 @@ func setDefaults() {
 	v.SetDefault("server.global_rate_limit", 100)
 	v.SetDefault("server.global_rate_burst", 200)
 	v.SetDefault("server.pid_file", "http-services.pid")
+	v.SetDefault("server.static_dir", "./static")
+	v.SetDefault("server.trusted_proxies", []string{"127.0.0.1", "::1"})
+	v.SetDefault("server.enable_cors", true)
 
 	// JWT 默认配置
 	v.SetDefault("jwt.expiration", "12h")
@@ -86,6 +90,7 @@ func setDefaults() {
 // applyConfig 将 Viper 配置应用到全局变量
 func applyConfig() error {
 	// Server 配置
+	ListenHost = strings.TrimSpace(v.GetString("server.host"))
 	ListenPort = v.GetInt("server.port")
 
 	// 解析大小字符串
@@ -114,6 +119,9 @@ func applyConfig() error {
 	if PidFile != "" && !filepath.IsAbs(PidFile) {
 		PidFile = filepath.Join(AbsPath, PidFile)
 	}
+	StaticDir = strings.TrimSpace(v.GetString("server.static_dir"))
+	TrustedProxies = getStringSlice("server.trusted_proxies")
+	EnableCORS = v.GetBool("server.enable_cors")
 
 	// JWT 配置
 	JWTKey = v.GetString("jwt.key")
@@ -134,6 +142,17 @@ func applyConfig() error {
 	RedisKeyPrefix = strings.TrimSpace(v.GetString("redis.key_prefix"))
 
 	return nil
+}
+
+func getStringSlice(key string) []string {
+	values := v.GetStringSlice(key)
+	if len(values) == 1 && strings.Contains(values[0], ",") {
+		values = strings.Split(values[0], ",")
+	}
+	for index := range values {
+		values[index] = strings.TrimSpace(values[index])
+	}
+	return values
 }
 
 // WatchConfig 监听配置文件变化并自动重新加载（热重载）

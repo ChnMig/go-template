@@ -15,6 +15,8 @@
 # 3. 系统目录 (/etc/http-services/config.yaml)
 
 server:
+  # HTTP 监听地址
+  host: "0.0.0.0"
   port: 8080
   pid_file: "http-services.pid"     # pid 文件路径（支持相对路径，相对程序所在目录）；服务退出时会自动删除
 
@@ -34,6 +36,13 @@ server:
   enable_rate_limit: false        # 是否启用全局限流
   global_rate_limit: 100          # 全局限流速率（每秒请求数）
   global_rate_burst: 200          # 全局限流突发容量
+
+  # Gin / 静态文件配置
+  static_dir: "./static"         # 为空时不挂载 /static
+  trusted_proxies:
+    - "127.0.0.1"
+    - "::1"
+  enable_cors: true               # OPTIONS 预检直接返回 204
 
 jwt:
   key: "YOUR_SECRET_KEY_HERE"  # 务必修改此密钥，否则存在安全风险（至少32字符）

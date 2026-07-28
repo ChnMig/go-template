@@ -4,9 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 
 	"http-services/api"
@@ -108,7 +110,7 @@ func main() {
 	r := api.InitApi()
 
 	// 创建 HTTP 服务器（使用配置化的超时参数）
-	addr := fmt.Sprintf(":%d", config.ListenPort)
+	addr := net.JoinHostPort(config.ListenHost, strconv.Itoa(config.ListenPort))
 	srv := &http.Server{
 		Addr:           addr,
 		Handler:        r,

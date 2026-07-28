@@ -13,6 +13,7 @@ import (
 // These configurations are usually generic
 var (
 	// listen
+	ListenHost = "0.0.0.0"
 	ListenPort = 8080 // api listen port
 	// run model
 	RunModelKey      = "model"
@@ -45,6 +46,9 @@ var (
 	GlobalRateLimit int           // 全局限流速率（每秒请求数）
 	GlobalRateBurst int           // 全局限流突发容量
 	PidFile         string        // pid 文件路径（支持相对路径，相对 AbsPath）
+	StaticDir       string        // 静态文件目录；为空时不挂载 /static
+	TrustedProxies  []string      // Gin 可信反向代理
+	EnableCORS      bool          // 是否启用跨域中间件
 
 	// Log
 	LogMaxSize  int

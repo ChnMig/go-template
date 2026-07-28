@@ -114,7 +114,11 @@ func monitorFile(done <-chan struct{}) {
 		zap.L().Error("File listening error", zap.Error(err))
 		return
 	}
-	defer watcher.Close()
+	defer func() {
+		if closeErr := watcher.Close(); closeErr != nil {
+			zap.L().Warn("close log file watcher failed", zap.Error(closeErr))
+		}
+	}()
 	// 监控日志目录，避免因日志文件轮转（rename）导致 watcher 失效。
 	err = watcher.Add(config.LogDir)
 	if err != nil {
@@ -122,8 +126,11 @@ func monitorFile(done <-chan struct{}) {
 	}
 	for {
 		select {
-		case event := <-watcher.Events:
-			if !(event.Has(fsnotify.Remove) || event.Has(fsnotify.Rename)) {
+		case event, ok := <-watcher.Events:
+			if !ok {
+				return
+			}
+			if !event.Has(fsnotify.Remove) && !event.Has(fsnotify.Rename) {
 				continue
 			}
 
@@ -143,8 +150,11 @@ func monitorFile(done <-chan struct{}) {
 				zap.L().Warn("log file missing, reopening logger", zap.String("path", path))
 				SetLogger()
 			}()
-		case err := <-watcher.Errors:
-			zap.L().Error("file listening error", zap.Error(err))
+		case watcherErr, ok := <-watcher.Errors:
+			if !ok {
+				return
+			}
+			zap.L().Error("file listening error", zap.Error(watcherErr))
 		case <-done:
 			// 收到停止信号，退出监控
 			return
