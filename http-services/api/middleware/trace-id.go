@@ -29,7 +29,7 @@ func TraceID() gin.HandlerFunc {
 		if !validTraceID {
 			generated, err := id.GenerateUUIDv7()
 			if err != nil {
-				zap.L().Error("generate trace ID failed", zap.Error(err))
+				serviceLog.WithRequest(c).Error("generate trace ID failed", zap.Error(err))
 				response.ReturnError(c, response.INTERNAL, "internal server error")
 				return
 			}
@@ -40,13 +40,9 @@ func TraceID() gin.HandlerFunc {
 		c.Request = c.Request.WithContext(serviceLog.WithTraceID(c.Request.Context(), traceID))
 		c.Header(TraceIDHeader, traceID)
 
-		contextLogger := zap.L().With(
-			zap.String("trace_id", traceID),
-			zap.String("method", c.Request.Method),
-			zap.String("path", c.Request.URL.Path),
-			zap.String("client_ip", c.ClientIP()),
-		)
-		c.Set(contextkey.Logger, contextLogger)
+		c.Set(contextkey.Logger, zap.L())
+		serviceLog.CaptureRequestBody(c)
+		contextLogger := serviceLog.FromContext(c)
 
 		contextLogger.Debug("http.request.started")
 		c.Next()

@@ -13,6 +13,8 @@ const (
 	JWTData = "jwtData"
 	// BoundParams 是 Gin context 中存放已绑定业务参数的 key。
 	BoundParams = "__bound_params__"
+	// RequestLogBody 是 Gin context 中存放被动请求体快照的 key。
+	RequestLogBody = "__request_log_body__"
 )
 
 type traceIDKey struct{}

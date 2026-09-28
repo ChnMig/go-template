@@ -11,7 +11,7 @@ Gin API layer. Owns engine initialization, global middleware order, versioned ro
 
 | Task | Location | Notes |
 |------|----------|-------|
-| Top-level Gin setup | `router.go` | `gin.Default`、Gin log redirect、trusted proxies、static、`/api` |
+| Top-level Gin setup | `router.go` | `gin.New`、Gin log redirect、trusted proxies、static、`/api` |
 | Middleware order | `router.go` | Order is part of behavior, not style |
 | Trace/logger injection | `middleware/trace-id.go` | Must run before access log and handlers |
 | JWT middleware | `middleware/jwt.go` | Stores decoded claims under `contextkey.JWTData` |
@@ -38,11 +38,12 @@ api.InitApi -> app.RegisterRoutes -> v1.RegisterRoutes -> open/private -> module
 Global order in `api/router.go`:
 
 ```text
-Gin Logger/Recovery -> TraceID -> optional IPRateLimit -> SecurityHeaders -> BodySizeLimit -> CORS
+Gin Logger / middleware.Recovery -> TraceID -> optional IPRateLimit -> SecurityHeaders -> BodySizeLimit -> CORS
 ```
 
-- `gin.Default` provides the framework access logger and panic recovery.
+- `gin.New` installs `gin.Logger()` and `middleware.Recovery()`; panic 日志包含请求上下文和堆栈，保持 HTTP 500 与断连处理。
 - `TraceID` runs before rate limiting and business handlers, writes the ID to Gin and standard contexts, and uses `http.request.started/completed` with the `status` field.
+- `TraceID` 安装被动 `CaptureRequestBody`；参数绑定失败通过 `log.WithRequest` 回退原始请求体，不提前读取、不脱敏，日志文本上限 64 KiB。
 - Global rate limit is config-driven: `config.EnableRateLimit`, `GlobalRateLimit`, `GlobalRateBurst`.
 - `BodySizeLimit` is config-driven via parsed `config.MaxBodySize`.
 - Shutdown must call `middleware.CleanupAllLimiters()` from `main.go`.

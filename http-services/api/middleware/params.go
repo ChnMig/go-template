@@ -62,7 +62,7 @@ func checkParamWithBinderAndMessage(
 	params interface{}, context *gin.Context, binder binding.Binding, message string,
 ) bool {
 	if err := bindParamWithBinder(params, context, binder); err != nil {
-		zap.L().Error("operation failed", zap.Error(err))
+		serviceLog.WithRequest(context).Warn("invalid request parameters", zap.Error(err))
 		if message == "" {
 			message = err.Error()
 		}
@@ -73,6 +73,9 @@ func checkParamWithBinderAndMessage(
 }
 
 func bindParamWithBinder(params interface{}, context *gin.Context, binder binding.Binding) error {
+	serviceLog.CaptureRequestBody(context)
+	// 重绑失败时不能残留上一次成功绑定的参数。
+	context.Set(serviceLog.BoundParamsKey, nil)
 	if err := context.ShouldBindWith(params, binder); err != nil {
 		return err
 	}

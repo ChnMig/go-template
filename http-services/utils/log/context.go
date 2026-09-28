@@ -2,7 +2,6 @@ package log
 
 import (
 	"context"
-	"net/http"
 
 	"http-services/utils/contextkey"
 
@@ -38,55 +37,34 @@ func FromStandardContext(ctx context.Context) *zap.Logger {
 	return logger.With(zap.String(traceIDKey, traceID))
 }
 
-// FromContext returns the request-scoped Gin logger when middleware installed one.
+// FromContext 从基础 logger 派生请求日志，统一附加一次请求元数据。
+// 没有 Gin TraceID 时继续从标准 context 读取，保留下游传递能力。
 func FromContext(ctx *gin.Context) *zap.Logger {
+	var base *zap.Logger
 	if ctx != nil {
 		if value, exists := ctx.Get(contextkey.Logger); exists {
-			if logger, ok := value.(*zap.Logger); ok && logger != nil {
-				return logger
-			}
-		}
-		if ctx.Request != nil {
-			return FromStandardContext(ctx.Request.Context())
+			base, _ = value.(*zap.Logger)
 		}
 	}
-	return GetLogger()
-}
-
-// WithRequest adds all parsed request parameters to the request-scoped logger.
-// It deliberately keeps full values for troubleshooting; callers decide when to use it.
-func WithRequest(ctx *gin.Context) *zap.Logger {
-	base := FromContext(ctx)
-	if ctx == nil || ctx.Request == nil {
+	if base == nil {
+		base = GetLogger()
+	}
+	if ctx == nil {
 		return base
 	}
-
-	fields := []zap.Field{zap.String("method", ctx.Request.Method)}
-	if ctx.Request.URL != nil {
-		fields = append(fields, zap.String("path", ctx.Request.URL.Path))
-		if rawQuery := ctx.Request.URL.RawQuery; rawQuery != "" {
-			fields = append(fields, zap.String("query", rawQuery))
-		}
+	fields := make([]zap.Field, 0, 4)
+	traceID := ctx.GetString(contextkey.TraceID)
+	if traceID == "" && ctx.Request != nil {
+		traceID, _ = TraceID(ctx.Request.Context())
 	}
-	if ctx.Request.Method == http.MethodPost ||
-		ctx.Request.Method == http.MethodPut ||
-		ctx.Request.Method == http.MethodPatch {
-		if len(ctx.Request.PostForm) > 0 {
-			fields = append(fields, zap.Any("form", ctx.Request.PostForm))
-		}
-		if ctx.Request.MultipartForm != nil && len(ctx.Request.MultipartForm.Value) > 0 {
-			fields = append(fields, zap.Any("multipart_form", ctx.Request.MultipartForm.Value))
-		}
+	if traceID != "" {
+		fields = append(fields, zap.String(traceIDKey, traceID))
 	}
-	if len(ctx.Params) > 0 {
-		pathParams := make(map[string]string, len(ctx.Params))
-		for _, param := range ctx.Params {
-			pathParams[param.Key] = param.Value
+	if ctx.Request != nil {
+		fields = append(fields, zap.String("method", ctx.Request.Method), zap.String("client_ip", ctx.ClientIP()))
+		if ctx.Request.URL != nil {
+			fields = append(fields, zap.String("path", ctx.Request.URL.Path))
 		}
-		fields = append(fields, zap.Any("path_params", pathParams))
-	}
-	if bound, exists := ctx.Get(BoundParamsKey); exists && bound != nil {
-		fields = append(fields, zap.Any("params", bound))
 	}
 	return base.With(fields...)
 }

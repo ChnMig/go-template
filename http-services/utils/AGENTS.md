@@ -28,6 +28,8 @@
 - 并发任务通过 `taskgroup.CancelOnError` / `ContinueOnError` 声明策略；业务错误优先级由调用方决定。
 - TLS 在反向代理、Ingress 或负载均衡终止，服务进程不内置 ACME/TLS 文件监听。
 
+- 请求通用字段由 `FromContext` 统一附加，Gin Context 保存基础 logger，避免重复 `trace_id/method/path/client_ip`。`TraceID` 先于限流并安装 `CaptureRequestBody`；绑定 helper 在每次绑定前清理旧参数。`WithRequest` 按原值记录，不脱敏；绑定失败或直接 Gin 绑定时回退原始 JSON/form 快照，语法错误保留原始文本，超长字段保留前 64 KiB 并标记截断。采集器不主动读取 Body，不改变验签重放、读取错误、Close 或大小限制；未读取、文件和二进制 Body 记录状态，multipart 文本字段仍保留。
+
 ## ANTI-PATTERNS
 
 - 不要在工具层引入业务模型或业务配置。

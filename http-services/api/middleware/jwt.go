@@ -2,10 +2,12 @@ package middleware
 
 import (
 	"github.com/gin-gonic/gin"
+	"go.uber.org/zap"
 
 	"http-services/api/response"
 	"http-services/utils/authentication"
 	"http-services/utils/contextkey"
+	"http-services/utils/log"
 )
 
 const AuthorizationHeader = "Authorization"
@@ -19,6 +21,7 @@ func TokenVerify(c *gin.Context) {
 	}
 	jwtData, err := authentication.JWTDecrypt(token)
 	if err != nil {
+		log.WithRequest(c).Warn("token verification failed", zap.Error(err))
 		response.ReturnError(c, response.UNAUTHENTICATED, "token verify failed.")
 		return
 	}

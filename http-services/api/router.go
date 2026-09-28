@@ -25,13 +25,14 @@ func InitApi() *gin.Engine {
 	gin.DefaultErrorWriter = ginErrorWriter
 
 	gin.SetMode(gin.ReleaseMode)
-	router := gin.Default()
+	router := gin.New()
+	router.Use(gin.Logger(), middleware.Recovery())
 	// Trust local reverse proxies such as Caddy/Nginx so ClientIP can use forwarded headers.
 	if err := router.SetTrustedProxies(config.TrustedProxies); err != nil {
 		zap.L().Error("set trusted proxies failed", zap.Error(err))
 	}
 
-	// gin.Default 已安装框架自带的 Logger 和 Recovery。
+	// 在可能提前返回的中间件前安装请求上下文和被动 Body 采集。
 	router.Use(middleware.TraceID())
 
 	// 1. 全局限流（如果启用）
