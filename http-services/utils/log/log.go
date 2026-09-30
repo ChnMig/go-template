@@ -37,7 +37,7 @@ func createDevLogger(level zapcore.Level) *zap.Logger {
 	encoder := zap.NewDevelopmentEncoderConfig()
 	core := zapcore.NewTee(
 		zapcore.NewSamplerWithOptions(
-			zapcore.NewCore(zapcore.NewConsoleEncoder(encoder), os.Stdout, level), time.Second, 4, 1),
+			newCancellationCore(zapcore.NewCore(zapcore.NewConsoleEncoder(encoder), os.Stdout, level)), time.Second, 4, 1),
 	)
 	return zap.New(core, zap.AddCaller())
 }
@@ -58,7 +58,7 @@ func createProductLogger(fileName string, level zapcore.Level) (*zap.Logger, *lu
 	fileWriter := zapcore.AddSync(lj)
 	core := zapcore.NewTee(
 		zapcore.NewSamplerWithOptions(
-			zapcore.NewCore(zapcore.NewJSONEncoder(fileEncoder), fileWriter, level), time.Second, 4, 1),
+			newCancellationCore(zapcore.NewCore(zapcore.NewJSONEncoder(fileEncoder), fileWriter, level)), time.Second, 4, 1),
 	)
 	return zap.New(core, zap.AddCaller()), lj
 }

@@ -54,6 +54,7 @@ Gin Logger / middleware.Recovery -> TraceID -> optional IPRateLimit -> SecurityH
 - All response helpers inject `timestamp` and `trace_id` from context.
 - Use `response.ReturnOk`, `ReturnOkWithTotal`, `ReturnSuccess`, `ReturnError`, or `ReturnErrorWithData`.
 - Error responses should log internal context but return user-friendly messages.
+- 统一错误响应在请求 context 已取消或响应为 `CANCELLED` 时仅记 Debug；请求超时及活动请求继续按响应 code 记 Warn/Error，不改变 HTTP 200、JSON envelope 与 Abort 行为。
 - Error paths use `log.WithRequest` so complete parsed request parameters and the response envelope remain available for troubleshooting; do not add redaction in the shared scaffold.
 
 ## ANTI-PATTERNS

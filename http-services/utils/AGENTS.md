@@ -8,7 +8,8 @@
 
 | Task | Location | Notes |
 |------|----------|-------|
-| 日志 | `log/` | 全局 Zap 生命周期、Gin/标准 context TraceID、完整请求参数、轮转 |
+| 日志 | `log/` | 全局 Zap 生命周期、Gin/标准 context TraceID、完整请求参数、轮转与取消日志降噪 |
+| 错误分类 | `apperrors/` | 检查包装/组合错误是否只包含请求取消，不按错误文本匹配 |
 | JWT | `authentication/` | JWT 签发、解析与 claims |
 | 密码 | `encryption/` | bcrypt hash、verify 与格式识别 |
 | ID | `id/` | Sonyflake、UUIDv7 与其 MD5 表示 |
@@ -25,6 +26,7 @@
 - 底层 helper 返回带上下文的 error，由边界层决定是否记录日志，避免重复日志。
 - Gin context key 统一使用 `contextkey`，不要散落裸字符串。
 - `log.WithRequest` 保留完整 query、form、path params 和已绑定参数，错误响应同时记录 response 与具体 error，不做共享层脱敏。
+- 公共 Zap core 只忽略 Warn/Error 中全部 typed error 都是纯 `context.Canceled` 的日志，支持 `With` 绑定字段及包装/组合错误；超时、混合异常、文本字段、类型化 nil 和分类 panic 均保留，DPanic/Panic/Fatal 不过滤。过滤 core 放在 sampler 内侧，保持阈值与采样规则。
 - 并发任务通过 `taskgroup.CancelOnError` / `ContinueOnError` 声明策略；业务错误优先级由调用方决定。
 - TLS 在反向代理、Ingress 或负载均衡终止，服务进程不内置 ACME/TLS 文件监听。
 

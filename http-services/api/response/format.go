@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"time"
 
+	"http-services/utils/apperrors"
 	"http-services/utils/contextkey"
 	"http-services/utils/log"
 
@@ -17,7 +18,7 @@ func ReturnErrorWithData(c *gin.Context, data responseData, result interface{}) 
 	data.TraceID = requestTraceID(c)
 	data.Detail = result
 	c.JSON(http.StatusOK, data)
-	logErrorResponse(l, "Returning error response with data", data)
+	logErrorResponse(l, c, "Returning error response with data", data)
 	// Return directly
 	c.Abort()
 }
@@ -58,18 +59,18 @@ func ReturnError(c *gin.Context, data responseData, message string) {
 		data.Message = message
 	}
 	c.JSON(http.StatusOK, data)
-	logErrorResponse(l, "Returning error response", data)
+	logErrorResponse(l, c, "Returning error response", data)
 	// Return directly
 	c.Abort()
 }
 
-func logErrorResponse(l *zap.Logger, message string, data responseData) {
+func logErrorResponse(l *zap.Logger, c *gin.Context, message string, data responseData) {
 	if l == nil {
 		l = zap.L()
 	}
 	field := zap.Any("response", data)
 	switch {
-	case data.Code == CANCELLED.Code:
+	case data.Code == CANCELLED.Code || (c != nil && c.Request != nil && apperrors.IsClientCancellation(c.Request.Context().Err())):
 		l.Debug(message, field)
 	case data.Code >= INTERNAL.Code:
 		l.Error(message, field)
