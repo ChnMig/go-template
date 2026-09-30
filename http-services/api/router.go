@@ -50,7 +50,7 @@ func InitApi() *gin.Engine {
 
 	// 6. 跨域处理 - 在业务逻辑前处理
 	if config.EnableCORS {
-		router.Use(middleware.CorsDomainHandler())
+		router.Use(middleware.CorssDomainHandler())
 	}
 
 	// 健康检查端点已移动到 openRouter（/api/v1/open/health）
