@@ -8,7 +8,7 @@ import (
 
 const (
 	corsAllowedMethods = "GET, POST, PUT, PATCH, DELETE, HEAD, OPTIONS"
-	corsAllowedHeaders = "Authorization, Content-Type, X-Trace-ID"
+	corsAllowedHeaders = "Authorization, Content-Type, X-Trace-ID, Cache-Control, Pragma"
 )
 
 // CorsDomainHandler 创建默认跨域处理中间件。
