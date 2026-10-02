@@ -20,8 +20,8 @@ func CorssDomainHandler() gin.HandlerFunc {
 			c.Header("Access-Control-Max-Age", "172800")
 		}
 		// Release all OPTIONS methods
-		if method == "OPTIONS" {
-			c.JSON(http.StatusOK, "Options Request!")
+		if method == http.MethodOptions {
+			c.String(http.StatusOK, "Options Request!")
 			c.Abort()
 			return
 		}
