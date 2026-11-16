@@ -89,7 +89,7 @@ func TestRouterUsesConfiguredCORSProxiesAndStaticDirectory(t *testing.T) {
 	preflight.Header.Set("Origin", "https://client.example")
 	preflightRecorder := httptest.NewRecorder()
 	router.ServeHTTP(preflightRecorder, preflight)
-	if preflightRecorder.Code != http.StatusNoContent {
+	if preflightRecorder.Code != http.StatusOK {
 		t.Fatalf("preflight status = %d", preflightRecorder.Code)
 	}
 	if got := preflightRecorder.Header().Get("Access-Control-Allow-Headers"); got != corsAllowedHeadersForTest {
@@ -112,7 +112,7 @@ func TestRouterUsesConfiguredCORSProxiesAndStaticDirectory(t *testing.T) {
 	}
 }
 
-const corsAllowedHeadersForTest = "Authorization, Content-Type, X-Trace-ID"
+const corsAllowedHeadersForTest = "*"
 
 func TestRouterCanDisableCORSAndStaticFiles(t *testing.T) {
 	previousMaxBodySize := config.MaxBodySize
@@ -135,7 +135,7 @@ func TestRouterCanDisableCORSAndStaticFiles(t *testing.T) {
 	request.Header.Set("Origin", "https://client.example")
 	recorder := httptest.NewRecorder()
 	router.ServeHTTP(recorder, request)
-	if recorder.Code == http.StatusNoContent || recorder.Header().Get("Access-Control-Allow-Origin") != "" {
+	if recorder.Code != http.StatusNotFound || recorder.Header().Get("Access-Control-Allow-Origin") != "" {
 		t.Fatalf("disabled CORS response = %d headers %#v", recorder.Code, recorder.Header())
 	}
 

@@ -4,6 +4,13 @@
 
 Gin + Viper + Zap 的 HTTP API 服务模板。仓库是单 Go module：`http-services`，可执行入口在根目录 `main.go`，没有 `cmd/`、`internal/`、`pkg/` 拆分。
 
+## 更新记录
+
+| 更新时间 | 更新内容（概述） | 对应详细章节 |
+| --- | --- | --- |
+| 2026-11-15 | 明确通用文档目录使用 .gitkeep 预置，业务文档仍按需编写。 | [CONVENTIONS](#conventions)、[文档目录职责](docs/README.md#目录职责) |
+| 2026-11-15 | 补充通用组件反哺边界、严格校验及开发和文档约束。 | [CONVENTIONS](#conventions)、[文档规范](docs/README.md) |
+
 ## STRUCTURE
 
 ```text
@@ -59,6 +66,15 @@ http-services/
 
 ## CONVENTIONS
 
+- 模板只提供健康检查和通用基础设施；反哺内容必须能脱离业务表、枚举、角色及配置独立使用和测试，不内置订单、金额结算、供应商协议或业务后台任务，不增加业务强依赖。
+- 维护规范与使用说明放 README、就近 AGENTS.md 和 docs；文档目录、完整接口要求、更新记录与校验见 `docs/README.md`，新建或修改文档均维护自身更新记录及必要导航。
+- `docs/feat`、`docs/update`、`docs/prd`、`docs/share`、`docs/origin` 作为通用目录骨架预置，空目录以 `.gitkeep` 纳入 Git；实际版本、接入面和业务文档按需创建，目录占位不引入业务实现。
+- `ParseHS256`、`JWTDecrypt`、`TokenVerify` 只接受 HS256 和有效 `exp`，空签名密钥拒绝。沿用原 `data` claims 结构，业务身份校验由应用负责；同步到已有项目时核对旧 Token 的算法和过期时间。
+- 严格 JSON 按接口选择 `CheckStrictJSONParam` / `BindStrictJSONParam`，拒绝未知字段及尾随 JSON 并执行 binding 校验，不修改 Gin 全局解码选项；普通绑定保持原契约。
+- 接口响应须说明具体失败字段、条件或处理环节，底层原始错误留日志，不透传 SQL、堆栈或内部结构体；API 通过 `errors.Is` 映射领域错误。
+- 解析入参、外部响应、回调或消息失败时保留对应原始数据和具体错误。请求采集器只保留已读取内容且文本限 64 KiB，截断和未读完必须标明；有完整诊断要求时由实际解析处在输入大小和耗时预算内留存全文，不重复消费 Body 或重发上游请求。
+- 关注查询和外部调用次数及耗时，不得为提速擅自改变同步／异步契约。同步成功必须满足接口承诺的完成条件；上游受理、任务提交、超时未知均不能冒充成功，重试沿用原幂等标识。
+- 数据库锁需有明确并发风险及最小持锁范围，不持数据库锁调用外部。复用已有配置、日志、响应、ID 和并发工具；业务编号由真实项目的公共入口封装 `utils/id`，不在各模块临时拼接发号，不在模板新增业务单号模型。
 - 启动顺序不可调换：运行模式必须在初始化 logger 前设置；logger 初始化后再启动配置热重载。
 - 配置文件名固定为 `config.yaml`，查找顺序：工作目录、`/etc/http-services/`。
 - 环境变量前缀固定 `HTTP_SERVICES_`；层级用 `_` 代替点，如 `HTTP_SERVICES_SERVER_PORT`。

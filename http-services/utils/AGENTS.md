@@ -4,6 +4,12 @@
 
 与业务无关的基础设施工具层；提供日志、认证、加密、ID、路径、pidfile、运行模式、context key 与并发任务组。
 
+## 更新记录
+
+| 更新时间 | 更新内容（概述） | 对应详细章节 |
+| --- | --- | --- |
+| 2026-11-15 | 明确 JWT 加固、公共 ID 复用与解析诊断边界。 | [CONVENTIONS](#conventions) |
+
 ## WHERE TO LOOK
 
 | Task | Location | Notes |
@@ -24,6 +30,9 @@
 
 - `utils/` 只放业务无关能力；业务常量、Redis key 和领域 DTO 不放这里。
 - 底层 helper 返回带上下文的 error，由边界层决定是否记录日志，避免重复日志。
+- JWT 统一通过 `ParseHS256` 限定 HS256、要求有效过期时间并拒绝空签名密钥；身份字段与业务角色不下沉到工具层。
+- `utils/id` 是基础 ID 能力入口，业务编号格式由真实项目的公共组件封装，不能在各业务模块重复实现；模板不引入订单号等业务语义。
+- 解析失败保留原始字段值或已读取正文及具体错误，不只输出部分结构体；出站响应由调用边界保留，不通过重发请求补日志。通用请求采集上限和未读完标记必须如实说明。
 - Gin context key 统一使用 `contextkey`，不要散落裸字符串。
 - `log.WithRequest` 保留完整 query、form、path params 和已绑定参数，错误响应同时记录 response 与具体 error，不做共享层脱敏。
 - 公共 Zap core 只忽略 Warn/Error 中全部 typed error 都是纯 `context.Canceled` 的日志，支持 `With` 绑定字段及包装/组合错误；超时、混合异常、文本字段、类型化 nil 和分类 panic 均保留，DPanic/Panic/Fatal 不过滤。过滤 core 放在 sampler 内侧，保持阈值与采样规则。

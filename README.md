@@ -9,6 +9,21 @@ go-template 的目标是**提高开发效率，而不是极致简化**。😉
 
 本仓库目前主要包含一个 HTTP API 服务模板 `http-services`，适合作为中小型后端服务的起步工程。
 
+模板默认提供健康检查与通用基础设施。业务模型、领域流程和系统间协议由使用模板的项目实现；通用能力反哺须保持业务无关，并附带独立测试。
+
+## 更新记录
+
+| 更新时间 | 更新内容（概述） | 对应详细章节 |
+| --- | --- | --- |
+| 2026-11-15 | 明确脚手架边界，补充严格校验、日志和文档规范入口，并校正配置与验证说明。 | [开发规范与文档](#开发规范与文档)、[日志说明：接口内 zap 使用约定（Logging）](#日志说明接口内-zap-使用约定logging)、[测试（Testing）](#测试testing) |
+
+## 开发规范与文档
+
+- [HTTP Services 使用与开发规范](http-services/README.md)：参数校验、JWT、错误、日志、接口契约和公共 ID 复用。
+- [文档规范与导航](http-services/docs/README.md)：按实际版本区分页面、数据库、后端与接口说明，系统间协议独立维护；字段、错误、示例及更新记录要求。
+- [HTTP 请求日志排查](http-services/docs/troubleshooting/request-logging.md)：原始数据、解析错误、采集上限与未读完标记。
+- [代理开发约定](AGENT.md) 与 [模块约束](http-services/AGENTS.md)：变更范围、目录边界及验证要求。
+
 ## 使用 gonew 下载模板
 
 推荐通过 [gonew](https://pkg.go.dev/golang.org/x/tools/cmd/gonew) 下载并初始化项目，这样可以直接指定新模块名，而不是简单拷贝。
@@ -31,7 +46,7 @@ go-template 的目标是**提高开发效率，而不是极致简化**。😉
    ```
 
 2. 编辑 `config.yaml` 并根据实际环境修改配置，尤其是：
-   - `jwt.key`: **必须修改为至少32字符的强密钥** (服务启动时会进行安全检查)
+   - `jwt.key`: 启用 JWT 时必须改为至少 32 字符的强密钥，并由项目在启动边界调用 `config.CheckConfig`；模板默认健康检查不强制启用 JWT
    - `jwt.expiration`: 访问令牌有效期（例如 `"12h"`、`"24h"`、`"30m"`）
    - `database.mysql_dsn`: 需要运行迁移或访问 MySQL 时填写
    - `redis.host` / `redis.password`: 需要 session、验证码、缓存等 Redis 能力时填写
@@ -128,9 +143,9 @@ redis:
 
 ### Configuration Reload & Restart
 
-当前模板虽然使用 Viper 支持监控 `config.yaml` 变更，但大部分配置（例如 `server.port`、TLS/ACME 开关、全局限流、超时配置等）只在进程启动时读取并应用，运行中的 HTTP 服务器和路由不会自动根据新配置重新构建。
+当前模板虽然使用 Viper 支持监控 `config.yaml` 变更，但大部分配置（例如 `server.port`、全局限流、超时配置等）只在进程启动时读取并应用，运行中的 HTTP 服务器和路由不会自动根据新配置重新构建。模板只监听 HTTP，TLS 由反向代理或负载均衡终止。
 
-因此在生产环境中，**修改配置后建议始终重启服务进程**，以确保所有配置项都按预期生效；不要依赖“热更新配置”来切换是否启用 TLS、修改端口或调整全局限流策略。
+因此在生产环境中，**修改配置后建议始终重启服务进程**，以确保所有配置项都按预期生效；不要依赖“热更新配置”来修改端口或调整全局限流策略。
 
 ## 功能特性（Features）
 
@@ -148,8 +163,9 @@ redis:
 - `TraceID`：为每个请求生成并传播请求 ID，支持链路追踪
 - `SecurityHeaders`：设置常用安全响应头（如 `X-Content-Type-Options`、`X-Frame-Options` 等）
 - `BodySizeLimit`：请求体大小限制（默认 10MB），防止大包攻击
-- `TokenVerify`：JWT 鉴权中间件
-- `CorsDomainHandler`：跨域（CORS）处理中间件
+- `TokenVerify`：JWT 鉴权中间件，只接受 HS256 和有效 `exp`
+- `CheckStrictJSONParam`：按接口启用的严格 JSON 绑定，拒绝未知字段与尾随 JSON，复用参数校验及原始输入诊断
+- `CorssDomainHandler`：跨域（CORS）处理中间件
 - `IPRateLimit`：基于 IP 的令牌桶限流
 - `TokenRateLimit`：基于登录用户 Token 的限流
 
@@ -157,7 +173,7 @@ redis:
 
 - **Authentication**（`utils/authentication`）：
   - JWT 生成与解析
-  - HS256 签名与校验
+  - HS256 签名与校验；校验时拒绝空签名密钥、其他算法、无过期时间或已过期 Token
   - 标准 claims 支持
 
 - **Encryption**（`utils/encryption`）：
@@ -212,7 +228,7 @@ func (h *Handler) GetUser(c *gin.Context) {
     )
 
     // 仅在排查请求参数相关问题时，使用 WithRequest 追加请求详情字段
-    // 默认不会记录请求体（body），只记录 query / form / 路径参数 / 预绑定业务参数
+    // 记录 query / form / 路径参数 / 预绑定业务参数，绑定失败时回退原始请求快照
     debugLogger := httplog.WithRequest(c)
     debugLogger.Debug("请求参数详情日志")
 }
@@ -222,7 +238,8 @@ func (h *Handler) GetUser(c *gin.Context) {
 
 - 正常业务日志：优先使用 `httplog.FromContext(c)`，保证所有日志都带有 `trace_id`，便于链路追踪。
 - 深度排查问题时：在局部（例如特定 handler）使用 `httplog.WithRequest(c)` 打印请求参数，避免对所有请求都记录大体积参数导致日志膨胀。
-- 错误处理：在向客户端返回错误响应之前，必须至少记录一条 `Error` 级别日志，且日志消息与字段应能够反映真实错误原因，避免使用“操作失败”这类模糊描述；推荐在统一错误映射函数（如 `ReturnDomainError`）中调用 `httplog.WithRequest(c).Error("健康检查领域错误", zap.Error(err))` 统一记录错误日志。
+- 错误处理：在边界层保留原始错误和请求上下文，写清操作、失败步骤与具体原因。业务拒绝通常记 Warn，内部异常记 Error，纯客户端取消沿用 Debug 降噪；统一响应已有诊断日志，不强制重复记录 Error。
+- 解析失败：保留对应的原始入参、接口返回值或字段值，不能只输出部分结构体。通用请求采集只观察已读取内容，文本限 64 KiB，截断及未读完均明确标记；完整原文需求由具体集成在输入与耗时预算内处理，详见 [日志规范](http-services/README.md#日志记录要求)。
 
 ## 项目结构（Project Structure）
 
@@ -262,14 +279,17 @@ http-services/
 运行全部测试：
 
 ```bash
+cd http-services
 make test
 ```
 
 运行带覆盖率的测试：
 
 ```bash
-go test -cover ./...
+make test-coverage
 ```
+
+`make test` 默认带 race、随机顺序并禁用测试结果缓存；`make verify` 执行静态检查、race 测试、临时构建与依赖校验，不修改源码。纯文档变更检查链接、锚点及示例。
 
 当前已覆盖的主要测试包括：
 - JWT 鉴权与 Token 处理
@@ -278,7 +298,7 @@ go test -cover ./...
 
 ## 安全特性（Security Features）
 
-- **JWT 密钥校验**：启动时会检测 JWT 密钥强度，弱密钥或默认值会拒绝启动
+- **JWT 校验**：统一解析入口限定 HS256 和有效过期时间，空签名密钥拒绝；启用 JWT 的项目在启动边界调用 `config.CheckConfig` 校验密钥强度与有效期
 - **请求体大小限制**：通过 `BodySizeLimit` 防止大体积请求导致的 DoS 风险
 - **安全响应头**：自动为响应添加通用安全 Header
 - **限流能力**：支持按 IP 或登录用户 Token 进行限流

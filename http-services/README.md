@@ -2,6 +2,17 @@
 
 基于 Gin 框架的 HTTP API 服务模板，提供了完整的项目结构、中间件支持、日志管理和配置管理功能。
 
+模板默认只提供健康检查与通用基础设施。业务表、状态机、后台任务和对接协议由使用模板的项目按需实现；反哺模板的代码须能脱离业务模型、枚举和配置独立使用及测试。
+
+文档入口：[文档规范与导航](docs/README.md) · [HTTP 请求日志排查](docs/troubleshooting/request-logging.md)。
+
+## 更新记录
+
+| 更新时间 | 更新内容（概述） | 对应详细章节 |
+| --- | --- | --- |
+| 2026-11-15 | 补齐文档目录骨架与 .gitkeep 占位规则。 | [推荐代码分层](#推荐代码分层)、[文档目录职责](docs/README.md#目录职责) |
+| 2026-11-15 | 加固 JWT 校验，增加可选严格 JSON 绑定；补充接口、日志、公共 ID 和文档规范，并校正验证命令说明。 | [开发规范](#开发规范)、[日志记录要求](#日志记录要求)、[测试说明](#测试说明)、[文档规范](docs/README.md) |
+
 ## 项目特点
 
 - ✅ **标准化项目结构** - 清晰的目录组织，易于维护和扩展
@@ -27,7 +38,7 @@ http-services/
 │   │       │   └── health/    # 健康检查模块（开放，/api/v1/open/health）
 │   │       └── private/       # 私有接口预留（/api/v1/private）
 │   ├── middleware/        # 中间件
-│   │   ├── access-log.go     # 结构化访问日志
+│   │   ├── strict_json.go    # 按接口启用的严格 JSON 绑定
 │   │   ├── cross-domain.go   # 跨域处理
 │   │   ├── jwt.go            # JWT 验证
 │   │   ├── page.go           # 分页处理
@@ -92,7 +103,7 @@ http-services/
 - `services/`：长驻服务和后台任务层，放 cron、消息队列 consumer/producer、worker 等运行期任务。模板当前预留 `services/cron/` 占位。
 - `common/`：跨模块共享语义，适合放枚举、常量、跨模块 DTO、事件封装等业务共识，不替代 `utils/`。
 - `utils/`：基础设施工具，保留认证、加密、ID、日志、`utils/pathtool`、`utils/runmodel`、`utils/taskgroup` 等通用能力，不放具体业务规则。
-- 真实应用如需部署、接口文档、脚本、示例或流水线，可按需增加 `docs/`、`deploy/`、`scripts/`、`examples/`、`.workflow/`。这些属于真实项目的生产化扩展，不是当前模板的必需目录。
+- 模板的 `docs/` 提供文档规范与排障说明，并用 `.gitkeep` 预置 `feat/`、`update/`、`prd/`、`share/`、`origin/` 空目录。真实应用按实际版本补充需求、接口和数据库文档；`deploy/`、`scripts/`、`examples/`、`.workflow/` 等生产化目录按需建立。
 
 ### 目录放置规则
 
@@ -778,7 +789,7 @@ stringData:
 ```
 
 **字段说明：**
-- `code`: HTTP 状态码
+- `code`: 响应体中的语义状态码；统一响应的 HTTP 状态仍为 200
 - `status`: 状态名称（如 OK, INVALID_ARGUMENT）
 - `description`: 标准错误描述（符合 Google API 规范）
 - `message`: 具体的业务错误信息（可选）
@@ -788,6 +799,8 @@ stringData:
 - `total`: 分页总数（可选）
 
 ### 2. 错误处理
+
+返回的 `message` 应说明哪个字段不正确、哪个条件不满足或哪个处理环节失败，例如“page_size 必须大于 0”或“读取数据超时，请稍后重试”。可预期的业务拒绝映射相应错误码；数据库、网络异常对外说明失败环节，完整底层错误保留在日志中，不直接透传 SQL、堆栈或内部结构体。领域错误通过 `errors.Is` 识别，并在 API 层统一映射；不能只写“操作失败”“系统异常”。
 
 ```go
 // 返回错误
@@ -870,13 +883,29 @@ if pageQuery.IsDisabled() {
 // 请求参数：page=-1 或 page_size=-1
 ```
 
+#### 按接口启用严格 JSON 绑定
+
+已有 `CheckJSONParam` 保留 Gin 的普通绑定行为。需要拒绝未知字段和尾随 JSON 的接口使用 `CheckStrictJSONParam`，它同时执行 DTO 的 `binding` 校验，不修改进程级解码配置：
+
+```go
+params := &struct {
+    Name string `json:"name" binding:"required"`
+}{}
+if !middleware.CheckStrictJSONParam(params, c) {
+    return
+}
+// 此后调用 domain，并映射为响应 DTO。
+```
+
+`CheckStrictJSONParamWithMessage(params, c, message)` 支持自定义对外提示，日志保留原始解析错误；`BindStrictJSONParam(params, c)` 只返回错误，由调用方决定响应。失败时清除旧绑定参数并复用原始请求采集，HTTP BodySizeLimit 仍生效。该工具不承诺拒绝重复 JSON 键或大小写字段别名；涉及签名的协议必须另行定义规范化规则。
+
 ### 4. 路由组织（分层）
 
 ```go
 // 顶层：api/router.go（仅初始化与挂载 /api，业务路由下沉到 app 层）
 func InitApi() *gin.Engine {
     router := gin.New()
-    router.Use(middleware.TraceID(), middleware.AccessLog(), middleware.Recovery())
+    router.Use(gin.Logger(), middleware.Recovery(), middleware.TraceID())
     // ... 全局中间件
     apiGroup := router.Group("/api")
     app.RegisterRoutes(apiGroup)
@@ -907,6 +936,8 @@ func RegisterRoutes(open *gin.RouterGroup) {
 ### 5. JWT 使用
 
 JWT 使用 `map[string]interface{}` 存储自定义数据，支持灵活的数据结构。
+
+`ParseHS256`、`JWTDecrypt` 和 `TokenVerify` 只接受 **HS256 且含有效 `exp`** 的 Token；空签名密钥、HS384/HS512、缺少过期时间和已过期 Token 均拒绝。`JWTIssue` 沿用 `data` 与标准 claims 的结构，启用 JWT 时须设置强密钥及正数 `jwt.expiration`，并在启动边界调用 `config.CheckConfig`。同步此加固到已有项目时，先核对历史签发格式；旧的无过期时间或其他算法 Token 需要重新签发，不增加绕过验证的回退。
 
 ```go
 import "http-services/utils/contextkey"
@@ -950,7 +981,34 @@ username := data["username"].(string)
 - 根据实际业务需求设计 Token 数据结构
 - 建议在项目中定义统一的 Token 数据结构规范
 
+### 6. 接口契约、响应速度与外部调用
+
+- 新增或修改接口时检查查询次数、范围、外部调用次数和耗时，减少重复查询及无谓等待；数据库与网络操作传递请求 context，并设置合理超时。
+- 接口设计须说明成功依据、必要持久化、失败原因、超时和重试语义。同步接口在本次请求内完成承诺的操作后才能返回成功，不能用任务提交或上游受理冒充完成；不得为快速返回擅自改为后台处理、回调确认或要求调用方轮询。
+- 只有业务需求明确采用异步流程时才设计受理状态、查询或通知契约。上游只能异步确认时，在设计阶段明确能力限制及可行方案，不自行改变对外承诺。
+- 超时、断连或响应解析失败不代表外部操作一定未执行。按协议使用原始幂等标识核实结果；无法确认时给出具体错误，不虚报成功、换号重试或自行增加后台补偿。幂等标识与重试行为由真实项目的协议定义。
+- 对外路径、方法、鉴权、DTO、枚举、单位和分页均属于接口契约。已发布接口优先通过可选字段或新入口演进，不把内部实现差异转嫁给调用方；草稿与已发布状态要区分。
+
+### 7. 数据库与公共组件复用
+
+- API 仅绑定参数、调用 domain、转换 DTO 和统一响应；不直接返回 DB model 或内部 service struct。领域层决定事务边界，数据库层提供存储能力。
+- 数据库锁按实际并发风险使用，说明锁定对象与范围，并缩短持锁时间；不得持有数据库锁调用外部接口。索引依查询和数据约束设计，不把加锁作为默认做法。
+- 业务编号复用 `utils/id` 的 ID 生成能力；真实项目如需订单号等带业务含义的格式，在自己的 `common/` 定义公共入口，集中维护长度及前缀，不能在各模块拼接时间戳、随机数或自增 ID。重试沿用原编号，外部系统编号按协议保存。模板不内置任何订单或资金模型。
+- 新能力先检查已有配置、日志、响应、ID 和并发组件。通用 helper 返回原始错误及必要上下文，由调用边界记录日志；不引入特定业务的凭据、表、枚举或后台任务。
+
+### 8. 文档交付
+
+按实际版本与受众维护页面说明、数据库设计、后端规则和接口文档，接口调用方应能独立完成接入；系统间协议单列在 `share/`。字段、嵌套 DTO、错误和示例需完整，文档变更维护更新记录及导航。目录与检查要求见 [文档规范与导航](docs/README.md)。
+
 ## 日志管理
+
+### 日志记录要求
+
+- 日志写清操作、失败步骤、业务对象与具体原因，附带请求上下文及原始 `error`，不能用“操作失败”等空话替代。Handler 使用 `log.FromContext(c)`，排查参数时使用 `log.WithRequest(c)`。
+- 请求绑定、接口返回值解析、回调或消息解码、数值和时间转换失败时，记录对应的原始数据及具体解析错误。不能只打印解析后的空值、零值或部分结构体，也不使用脱敏内容或摘要代替实际值。数据流在读取或解析时留存，不在失败后重复读取已消耗的 Body，更不能为了补日志重发业务请求。
+- 入参可复用被动请求采集器；该采集器只保留已读取内容，文本上限 64 KiB，超长或未读完均明确标记，不能把前缀声称为完整原文。具体集成要求完整诊断时，在输入大小和耗时预算内由解析处留存完整原文；二进制与文件上传遵循各自诊断策略，不能无界读入内存。细节见 [HTTP 请求日志](docs/troubleshooting/request-logging.md)。
+- 外部接口失败记录接口地址、状态码、耗时、已收到的响应内容及原始错误；未收到响应时写明。诊断工作不得覆盖原操作结果，不为日志擅自增加后台任务。是否落库、如何保留和清理由使用模板的项目决定。
+- 业务拒绝通常记 Warn，内部异常记 Error；纯客户端取消沿用 Debug 降噪，超时仍保留。统一响应已记录响应上下文，补充底层错误时避免多层重复记录同一异常。
 
 ### 开发模式（`-d` 参数）
 
@@ -993,17 +1051,21 @@ import "go.uber.org/zap"
 
 // 记录日志
 zap.L().Info("业务事件", zap.String("action", "process"))
-zap.L().Error("操作失败", zap.Error(err))
+zap.L().Error("写入配置文件失败", zap.String("path", configPath), zap.Error(err))
 zap.L().Debug("调试信息", zap.Any("data", data))
 
 // api 层获取日志实例（仅带基础上下文，如 trace_id、method、path）
-log := log.FromContext(c)
-log.Info("处理请求", zap.String("path", c.Request.URL.Path))
+logger := log.FromContext(c)
+logger.Info("处理请求", zap.String("path", c.Request.URL.Path))
 
 // 如需在排查问题时同时记录本次请求的参数（query / 表单 / 路径参数），
 // 可以使用 WithRequest 获取带请求参数字段的 logger：
-log := log.WithRequest(c)
-log.Error("处理请求失败", zap.Error(err))
+requestLogger := log.WithRequest(c)
+requestLogger.Error("读取请求对应的数据失败", zap.Error(err))
+
+// 仅在响应解析失败的分支使用已保留的原文；工具层返回 error，边界层记录。
+logger.Error("解析外部接口响应失败", zap.String("url", upstreamURL),
+    zap.Int("status_code", statusCode), zap.ByteString("raw_response_body", responseBody), zap.Error(err))
 ```
 
 ## 命令行参数
@@ -1038,16 +1100,16 @@ make clean     # 清理构建文件
 make version   # 显示版本信息
 make test      # 运行测试
 make test-race # 使用 race detector 与随机顺序运行测试
-make verify    # 依次执行格式化、静态检查、覆盖率测试和 race 测试
+make test-coverage # 按需生成覆盖率报告
+make verify    # 静态检查、race 测试、临时构建和依赖校验，不修改源码
 ```
 
 ### 测试说明
 
-- 运行 `make test`：
-  - 输出中文汇总（包数量、通过/失败、用例通过/失败/跳过）
-  - 生成覆盖率文件 `coverage.out` 并打印总覆盖率
-- 运行 `make test-race`：使用 `-race -shuffle=on -count=1` 检查数据竞争和测试顺序依赖
-- 如需仅查看覆盖率，也可直接使用 `go tool cover -func=coverage.out`
+- `make test` 和 `make test-race` 均使用 `-race -shuffle=on -count=1` 检查数据竞争和测试顺序依赖，不生成覆盖率文件。
+- `make test-coverage` 单独生成 `coverage.out` 并打印覆盖率。
+- `make verify` 执行 `go vet`、race 测试、临时目录构建和 `go mod verify`；格式化单独执行 `make fmt`，它会修改源码。
+- 行为变更测试覆盖成功、失败、边界及兼容行为；HTTP 测试同时断言 HTTP 状态与响应体契约。纯文档变更检查链接、示例和引用，不额外运行无关业务测试。
 
 ## API 示例
 

@@ -7,6 +7,12 @@
 
 Gin API layer. Owns engine initialization, global middleware order, versioned route aggregation, response envelope, and API-facing DTO/error mapping.
 
+## 更新记录
+
+| 更新时间 | 更新内容（概述） | 对应详细章节 |
+| --- | --- | --- |
+| 2026-11-15 | 增加严格 JSON、JWT 校验及接口错误和契约同步要求；核对 CORS 原有行为与测试。 | [MIDDLEWARE CONTRACT](#middleware-contract)、[RESPONSE CONTRACT](#response-contract) |
+
 ## WHERE TO LOOK
 
 | Task | Location | Notes |
@@ -47,6 +53,9 @@ Gin Logger / middleware.Recovery -> TraceID -> optional IPRateLimit -> SecurityH
 - Global rate limit is config-driven: `config.EnableRateLimit`, `GlobalRateLimit`, `GlobalRateBurst`.
 - `BodySizeLimit` is config-driven via parsed `config.MaxBodySize`.
 - Shutdown must call `middleware.CleanupAllLimiters()` from `main.go`.
+- `CheckStrictJSONParam` / `BindStrictJSONParam` 按接口启用，拒绝未知字段和尾随 JSON，并执行 binding 校验；不改变普通 JSON helper 或 Gin 全局开关。失败诊断保留原始输入及具体错误，不能使用部分解码结构体替代。
+- `TokenVerify` 通过统一解析入口限定 HS256 并要求有效 `exp`，空签名密钥拒绝；保持 Authorization 原请求方式、claims 的 data 结构和统一响应格式。
+- 当前 CORS 预检沿用 HTTP 200 与 `Access-Control-Allow-Headers: *`；关闭 CORS 时，未注册的 OPTIONS 路由返回 404，测试按既有契约断言。
 
 ## RESPONSE CONTRACT
 
@@ -54,6 +63,7 @@ Gin Logger / middleware.Recovery -> TraceID -> optional IPRateLimit -> SecurityH
 - All response helpers inject `timestamp` and `trace_id` from context.
 - Use `response.ReturnOk`, `ReturnOkWithTotal`, `ReturnSuccess`, `ReturnError`, or `ReturnErrorWithData`.
 - Error responses should log internal context but return user-friendly messages.
+- `message` 明确失败字段、条件或环节，内部异常不直接透传；已发布路径、鉴权、DTO、枚举、单位及同步／异步语义属于契约，修改时同步必要文档与测试，完整性要求见 `../docs/README.md`。
 - 统一错误响应在请求 context 已取消或响应为 `CANCELLED` 时仅记 Debug；请求超时及活动请求继续按响应 code 记 Warn/Error，不改变 HTTP 200、JSON envelope 与 Abort 行为。
 - Error paths use `log.WithRequest` so complete parsed request parameters and the response envelope remain available for troubleshooting; do not add redaction in the shared scaffold.
 
